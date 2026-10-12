@@ -50,7 +50,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/umituz/web-hono"
+    "url": "git+https://github.com/umituz/web-hono.git"
   },
   "peerDependencies": {
     "@neondatabase/serverless": "^1.0.0",
