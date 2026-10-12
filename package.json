@@ -1,0 +1,84 @@
+{
+  "name": "@umituz/web-hono",
+  "version": "1.0.0",
+  "description": "Hono backend contract for Cloudflare Workers + Neon Postgres: crudRoutes factory, pickPatch, validateJson, apiFetch/apiWrite client, and db lifecycle scripts (reset / snapshot / seed)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./validator": "./src/validator.ts",
+    "./client": "./src/client.ts",
+    "./lifecycle": "./src/lifecycle.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test",
+    "version:patch": "npm version patch -m 'chore: release v%s'",
+    "version:minor": "npm version minor -m 'chore: release v%s'",
+    "version:major": "npm version major -m 'chore: release v%s'"
+  },
+  "keywords": [
+    "hono",
+    "hono-api",
+    "cloudflare-workers",
+    "workers",
+    "neon",
+    "postgres",
+    "drizzle",
+    "drizzle-orm",
+    "crud",
+    "crud-factory",
+    "rest-api",
+    "spa-fallback",
+    "zod",
+    "validation",
+    "api-client",
+    "seed",
+    "snapshot",
+    "database-lifecycle",
+    "serverless",
+    "typescript",
+    "edge"
+  ],
+  "author": "umituz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umituz/web-hono"
+  },
+  "peerDependencies": {
+    "@neondatabase/serverless": "^1.0.0",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@neondatabase/serverless": "^1.2.0",
+    "@types/node": "~22.13.10",
+    "drizzle-orm": "^0.45.4",
+    "eslint": "^9.32.0",
+    "hono": "^4.13.13",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.58.0",
+    "vitest": "3.2.4",
+    "zod": "^4.6.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
+}
