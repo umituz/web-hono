@@ -1,7 +1,7 @@
 {
   "name": "@umituz/web-hono",
-  "version": "1.0.0",
-  "description": "Hono backend contract for Cloudflare Workers + Neon Postgres: crudRoutes factory, pickPatch, validateJson, apiFetch/apiWrite client, and db lifecycle scripts (reset / snapshot / seed)",
+  "version": "1.1.0",
+  "description": "Hono backend contract for Cloudflare Workers + Neon Postgres: crudRoutes factory, pickPatch, validateJson, apiFetch/apiWrite client, reactive fetch-backed store (+React hooks), and db lifecycle scripts (reset / snapshot / seed)",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,6 +10,8 @@
     ".": "./src/index.ts",
     "./validator": "./src/validator.ts",
     "./client": "./src/client.ts",
+    "./store": "./src/store.ts",
+    "./store/react": "./src/store-react.ts",
     "./lifecycle": "./src/lifecycle.ts",
     "./package.json": "./package.json"
   },
@@ -39,6 +41,9 @@
     "zod",
     "validation",
     "api-client",
+    "store",
+    "reactive-store",
+    "cache",
     "seed",
     "snapshot",
     "database-lifecycle",
@@ -56,15 +61,23 @@
     "@neondatabase/serverless": "^1.0.0",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.0.0",
+    "react": "^18.0.0 || ^19.0.0",
     "zod": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@neondatabase/serverless": "^1.2.0",
     "@types/node": "~22.13.10",
+    "@types/react": "^19.1.0",
     "drizzle-orm": "^0.45.4",
     "eslint": "^9.32.0",
     "hono": "^4.13.13",
+    "react": "^19.1.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.58.0",
     "vitest": "3.2.4",
