@@ -1,6 +1,6 @@
 {
   "name": "@umituz/web-hono",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Hono backend contract for Cloudflare Workers + Neon Postgres: crudRoutes factory, pickPatch, validateJson, apiFetch/apiWrite client, reactive fetch-backed store (+React hooks), and db lifecycle scripts (reset / snapshot / seed)",
   "type": "module",
   "main": "./src/index.ts",
