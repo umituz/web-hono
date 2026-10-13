@@ -14,9 +14,9 @@
  *   `/client`     apiFetch / apiWrite — the same-origin API client
  *   `/lifecycle`  reset / snapshot / seed — the shared-Neon db lifecycle
  */
-export { crudRoutes } from './crud';
-export type { CrudSpec, CrudTable } from './crud';
+export { crudRoutes, listRoutes } from './crud';
+export type { CrudSpec, CrudTable, ListSpec } from './crud';
 export { getDb } from './db';
-export { uid, pickPatch } from './lib';
+export { uid, pickPatch, stampUpdate } from './lib';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';

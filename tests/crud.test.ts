@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { crudRoutes } from '../src/crud';
+import { crudRoutes, listRoutes } from '../src/crud';
+import { stampUpdate } from '../src/lib';
 import { apiNotFound, spaFallback } from '../src/handlers';
 import type { ApiEnv } from '../src/env';
-import { widgets } from './helpers';
+import { journals, widgets } from './helpers';
 
 /* GET/PATCH success paths need a live Neon DB — they are proven by the
  * consuming app's E2E (pilot: foodora). Covered here: the paths that
@@ -30,6 +31,28 @@ describe('crudRoutes', () => {
     const res = await crudApp().request('/api/widgets/w_1', { method: 'PATCH', body: 'not json' });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'No updatable fields' });
+  });
+});
+
+describe('listRoutes', () => {
+  it('mounts no write surface — PATCH falls through to 404', async () => {
+    const app = new Hono<{ Bindings: ApiEnv }>();
+    app.route('/api', listRoutes({ path: '/journals', table: journals, orderBy: { col: journals.createdAt } }));
+    const res = await app.request('/api/journals/j_1', { method: 'PATCH', body: JSON.stringify({ note: 'x' }) });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('stampUpdate', () => {
+  it('stamps a Date for timestamp updatedAt columns (fleet standard, unchanged)', () => {
+    const stamp = stampUpdate(widgets);
+    expect(stamp.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("stamps today's 'YYYY-MM-DD' for date-string updatedAt columns", () => {
+    const stamp = stampUpdate(journals);
+    expect(stamp.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(typeof stamp.updatedAt).toBe('string');
   });
 });
 

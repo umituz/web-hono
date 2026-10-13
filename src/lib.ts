@@ -11,6 +11,28 @@ export function uid(prefix: string): string {
 /** Fields no client may ever patch. */
 const PROTECTED_KEYS = new Set(['id', 'createdAt', 'updatedAt', 'deletedAt']);
 
+/** Local calendar day as 'YYYY-MM-DD' — the stamp for date-string columns. */
+function localDateStamp(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * updatedAt stamp matching the table's column type. Fleet-standard tables
+ * (timestamp withTimezone) get a Date — unchanged from previous versions.
+ * Domains that model updatedAt as a calendar date column (date string,
+ * e.g. polaris) get today's local 'YYYY-MM-DD' instead of a Date that the
+ * column cannot carry.
+ */
+export function stampUpdate(table: PgTable): Record<string, unknown> {
+  const columns = getTableColumns(table) as unknown as Record<string, { columnType: string }>;
+  return columns.updatedAt?.columnType.includes('Timestamp')
+    ? { updatedAt: new Date() }
+    : { updatedAt: localDateStamp() };
+}
+
 /**
  * Filters a JSON patch body down to the table's own columns (drizzle speaks
  * the camelCase schema PROPERTY names — which are the domain field names).
