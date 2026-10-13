@@ -12,3 +12,13 @@ export const widgets = pgTable('wh_widgets', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
+
+/** Date-string-stamped table (polaris convention): updatedAt is a calendar
+ *  date column, so the update stamp must be a 'YYYY-MM-DD' string. */
+export const journals = pgTable('wh_journals', {
+  id: text('id').primaryKey(),
+  note: text('note'),
+  createdAt: date('created_at', { mode: 'string' }).notNull(),
+  updatedAt: date('updated_at', { mode: 'string' }).notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
