@@ -1,4 +1,5 @@
 import { getTableColumns } from 'drizzle-orm';
+import { timestamp } from 'drizzle-orm/pg-core';
 import type { PgTable } from 'drizzle-orm/pg-core';
 
 /** Server-side id generation: `${prefix}_${base36 timestamp}${base36 counter}`. */
@@ -6,6 +7,20 @@ let idCounter = 0;
 export function uid(prefix: string): string {
   idCounter += 1;
   return `${prefix}_${Date.now().toString(36)}${idCounter.toString(36)}`;
+}
+
+/**
+ * Fleet time-trio columns for timestamptz tables — spread into a pgTable
+ * definition: `{ id: text('id').primaryKey(), name: text('name'), ...trio() }`.
+ * One encoding of the fleet standard instead of the three (inline columns,
+ * factory functions, spread objects) the 1.x apps each hand-rolled.
+ */
+export function trio() {
+  return {
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  };
 }
 
 /** Fields no client may ever patch. */

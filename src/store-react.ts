@@ -71,5 +71,41 @@ export function makeStoreHooks<Database extends object>(store: Store<Database>) 
     return valueRef.current;
   }
 
-  return { useQuery, useDbValue };
+  /** Typed synchronous collection read that re-renders on that collection's
+   *  channel: `const items = useCollection('items');` — Database['items']. */
+  function useCollection<K extends keyof Database & string>(key: K): Database[K] {
+    const [, force] = useState(0);
+    useEffect(() => store.subscribe([key], () => force((v) => v + 1)), [key]);
+    return store.getDb()[key];
+  }
+
+  /** The app boot gate: loading while the first hydration runs, error +
+   *  retry on failure. Replaces the per-app boot-gate providers 1.x apps
+   *  hand-rolled around ensureHydrated. */
+  function useHydration(): { status: 'loading' | 'ready' | 'error'; error?: string; retry: () => void } {
+    const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error'; error?: string }>({ status: 'loading' });
+    const [attempt, setAttempt] = useState(0);
+
+    useEffect(() => {
+      let alive = true;
+      setState({ status: 'loading' });
+      store.ensureHydrated().then(
+        () => {
+          if (alive) setState({ status: 'ready' });
+        },
+        (err) => {
+          // ensureHydrated already reset itself — the next call (retry) refetches.
+          if (alive) setState({ status: 'error', error: err instanceof Error ? err.message : 'Hydration failed' });
+        },
+      );
+      return () => {
+        alive = false;
+      };
+    }, [attempt]);
+
+    const retry = useCallback(() => setAttempt((a) => a + 1), []);
+    return { status: state.status, error: state.error, retry };
+  }
+
+  return { useQuery, useDbValue, useCollection, useHydration };
 }

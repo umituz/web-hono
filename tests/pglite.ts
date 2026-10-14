@@ -1,0 +1,53 @@
+import { PGlite } from '@electric-sql/pglite';
+import { drizzle } from 'drizzle-orm/pglite';
+import type { CrudDb } from '../src/crud';
+import type { ApiEnv } from '../src/env';
+
+/* Internal test harness: REAL in-memory Postgres for factory coverage — no
+ * Neon, no network. The raw DDL mirrors tests/helpers.ts fixture tables and
+ * documents the actual SQL contract the factory depends on (text pk,
+ * timestamptz trio). The unique index on name exists solely to prove the
+ * postgres 23505 → 409 mapping through apiOnError.
+ *
+ * One PGlite instance per process (startup is the slow part) — tests reset
+ * state with TRUNCATE, which keeps schema and defaults. */
+
+const DDL = `
+  CREATE TABLE wh_widgets (
+    id text PRIMARY KEY,
+    name text,
+    count integer,
+    opened_at timestamptz,
+    best_before date,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
+  CREATE UNIQUE INDEX wh_widgets_name_key ON wh_widgets (name);
+`;
+
+let client: PGlite | null = null;
+let dbRef: CrudDb | null = null;
+
+export async function makeTestDb(): Promise<CrudDb> {
+  if (!client) {
+    client = new PGlite();
+    await client.exec(DDL);
+    // Cross-driver injection (pglite vs neon-http) is type-level only.
+    dbRef = drizzle(client) as unknown as CrudDb;
+  }
+  return dbRef!;
+}
+
+/** Fast per-test reset: rows gone, schema/defaults kept. */
+export async function resetDb(): Promise<void> {
+  if (client) await client.exec('TRUNCATE wh_widgets');
+}
+
+/** Bindings the factory needs; DATABASE_URL is unused once db is injected. */
+export function testEnv(): ApiEnv {
+  return {
+    DATABASE_URL: 'postgresql://pglite-in-memory',
+    ASSETS: { fetch: async () => new Response('spa') },
+  };
+}

@@ -1,22 +1,29 @@
 /**
- * @umituz/web-hono — the Hono backend contract for single-Worker apps on
- * Cloudflare (SPA assets + `/api/*` Hono) with Neon Postgres via drizzle:
- * the crudRoutes factory, pickPatch/uid helpers, getDb, the JSON-404 and
- * SPA-fallback handlers, and the ApiEnv binding types.
+ * @umituz/web-hono — the API backend platform for single-Worker apps on
+ * Cloudflare (SPA assets + `/api/*` Hono) with Neon Postgres via drizzle.
  *
  * Apps keep their schema (with TABLE_PREFIX), domain routers, zod schemas,
- * and business rules — this package owns the cross-cutting API skeleton
- * only.
+ * and business rules — this package owns the cross-cutting skeleton:
+ * the createApi app factory, the error envelope layer, the full-CRUD
+ * resource factory, getDb, the uid/pickPatch/stampUpdate/trio helpers,
+ * the JSON-404 and SPA-fallback handlers, and the ApiEnv binding types.
  *
  * Entry points:
  *   `.`           server core (this file)
+ *   `/types`      Row/NewRow/Serialized/ClientRow — the schema→client type bridge
  *   `/validator`  validateJson — the zod `{ error, details }` body contract
  *   `/client`     apiFetch / apiWrite — the same-origin API client
+ *   `/store`      createStore — the fetch-backed reactive store
+ *   `/store/react` makeStoreHooks — useQuery/useDbValue/useCollection/useHydration
  *   `/lifecycle`  reset / snapshot / seed — the shared-Neon db lifecycle
  */
+export { createApi } from './api';
+export type { ApiConfig } from './api';
+export { healthRouter } from './health';
+export { ApiError, apiOnError } from './errors';
 export { crudRoutes, listRoutes } from './crud';
-export type { CrudSpec, CrudTable, ListSpec } from './crud';
+export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec } from './crud';
 export { getDb } from './db';
-export { uid, pickPatch, stampUpdate } from './lib';
+export { uid, pickPatch, stampUpdate, trio } from './lib';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';
