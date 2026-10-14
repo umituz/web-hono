@@ -24,6 +24,16 @@ describe('apiFetch', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('gateway timeout', { status: 502 })));
     await expect(apiFetch('/api/x')).rejects.toThrow('API /api/x responded 502');
   });
+
+  it('resolves undefined for void endpoints (204 without a body)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
+    await expect(apiFetch('/api/x', { method: 'DELETE' })).resolves.toBeUndefined();
+  });
+
+  it('resolves undefined for an empty 200 body too', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
+    await expect(apiFetch('/api/x')).resolves.toBeUndefined();
+  });
 });
 
 describe('apiWrite', () => {

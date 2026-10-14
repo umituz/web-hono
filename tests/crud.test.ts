@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
+import { pgTable, text } from 'drizzle-orm/pg-core';
 import { crudRoutes, listRoutes } from '../src/crud';
 import { stampUpdate } from '../src/lib';
 import { apiNotFound, spaFallback } from '../src/handlers';
 import type { ApiEnv } from '../src/env';
 import { journals, widgets } from './helpers';
+
+/** Minimal table WITHOUT the fleet time trio — stamps nothing, never 500s. */
+const bare = pgTable('wh_bare', { id: text('id').primaryKey() });
 
 /* GET/PATCH success paths need a live Neon DB — they are proven by the
  * consuming app's E2E (pilot: foodora). Covered here: the paths that
@@ -53,6 +57,10 @@ describe('stampUpdate', () => {
     const stamp = stampUpdate(journals);
     expect(stamp.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(typeof stamp.updatedAt).toBe('string');
+  });
+
+  it('stamps nothing when the table has no updatedAt column', () => {
+    expect(stampUpdate(bare)).toEqual({});
   });
 });
 

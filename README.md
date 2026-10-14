@@ -23,7 +23,7 @@ Peer dependencies (install alongside): `hono ^4`, `drizzle-orm ^0.45`, `@neondat
 
 | Entry point | Exports | Used by |
 |---|---|---|
-| `@umituz/web-hono` | `crudRoutes`, `CrudSpec`/`CrudTable`, `getDb`, `uid`, `pickPatch`, `apiNotFound`, `spaFallback`, `ApiEnv` | `api/index.ts`, area routers, `api/db.ts` |
+| `@umituz/web-hono` | `crudRoutes`, `listRoutes`, `CrudSpec`/`CrudTable`/`ListSpec`, `getDb`, `uid`, `pickPatch`, `stampUpdate`, `apiNotFound`, `spaFallback`, `ApiEnv` | `api/index.ts`, area routers, `api/db.ts` |
 | `@umituz/web-hono/validator` | `validateJson(schema, message?)` | every hand-written POST/PATCH route |
 | `@umituz/web-hono/client` | `apiFetch<T>`, `apiWrite<T>` | `src/data/http.ts`, repositories |
 | `@umituz/web-hono/store` | `createStore`, `StoreConfig`, `REFETCH_ALL` | `src/data/store.ts` (the app's whole cache layer) |
@@ -149,7 +149,7 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 npm test
 ```
 
-28 vitest cases cover the pure logic and DB-free short-circuit paths (pickPatch filters, uid shape, the 400/404 envelopes, validator contract, client error mapping, reset safety stop, and the store machine: hydration dedupe/retry, refresh selectivity, pub/sub semantics, apiWrite success/failure). Live-DB paths (list/PATCH success, snapshot/seed, hydration against the real API) are proven by the consuming app's E2E — the pilot is foodora.
+34 vitest cases cover the pure logic and DB-free short-circuit paths (pickPatch filters, stampUpdate column-type stamps, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, reset safety stop, and the store machine: hydration dedupe/retry, refresh selectivity, pub/sub semantics, apiWrite success/failure). Live-DB paths (list/PATCH success, snapshot/seed, hydration against the real API) are proven by the consuming app's E2E — the pilot is foodora.
 
 ## License
 

@@ -28,9 +28,11 @@ function localDateStamp(): string {
  */
 export function stampUpdate(table: PgTable): Record<string, unknown> {
   const columns = getTableColumns(table) as unknown as Record<string, { columnType: string }>;
-  return columns.updatedAt?.columnType.includes('Timestamp')
-    ? { updatedAt: new Date() }
-    : { updatedAt: localDateStamp() };
+  const updatedAt = columns.updatedAt;
+  // No updatedAt column → stamp nothing; stamping a nonexistent column would
+  // fail the drizzle update at runtime.
+  if (!updatedAt) return {};
+  return updatedAt.columnType.includes('Timestamp') ? { updatedAt: new Date() } : { updatedAt: localDateStamp() };
 }
 
 /**

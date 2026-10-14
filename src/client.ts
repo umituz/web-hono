@@ -12,7 +12,10 @@ export async function apiFetch<T>(path: string, init: { method?: 'POST' | 'PATCH
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `API ${path} responded ${res.status}`);
   }
-  return (await res.json()) as T;
+  // Void endpoints (204 / empty body) resolve to undefined — res.json()
+  // would throw a SyntaxError on the empty stream.
+  const text = await res.text();
+  return (text.length > 0 ? JSON.parse(text) : undefined) as T;
 }
 
 /**
