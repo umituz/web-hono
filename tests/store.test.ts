@@ -158,3 +158,98 @@ describe('createStore', () => {
     expect(store.getDb().items).toEqual([{ id: 'old' }]);
   });
 });
+
+describe('store 1.3 additions', () => {
+  it('read(): hydrates once, then runs the selector against the live cache', async () => {
+    const { calls } = stubFetch({
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': () => ({ on: true }),
+    });
+    const store = makeStore();
+    const found = await store.read((db) => db.items.find((i) => i.id === 'a'));
+    expect(found).toEqual({ id: 'a' });
+    expect(store.read((db) => db.flag.on)).resolves.toBe(true);
+    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(1); // still one round
+  });
+
+  it('view(): recomputes only when one of its keys loads again', async () => {
+    let flag = { on: false };
+    stubFetch({
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': () => flag,
+    });
+    const store = makeStore();
+    const compute = vi.fn((db: Db) => db.flag.on);
+    const getOn = store.view(['flag'], compute);
+
+    await store.ensureHydrated();
+    expect(getOn()).toBe(false); // first call computes
+    expect(getOn()).toBe(false); // memoized — no recompute
+    expect(compute).toHaveBeenCalledTimes(1);
+
+    flag = { on: true }; // server state changes…
+    await store.refresh(['flag']);
+    expect(getOn()).toBe(true); // …key reloaded → recompute
+    expect(compute).toHaveBeenCalledTimes(2);
+  });
+
+  it('subscribeAll(): fires on every collection change', async () => {
+    stubFetch({
+      'GET /api/items': () => [],
+      'GET /api/flag': () => ({ on: false }),
+    });
+    const store = makeStore();
+    await store.ensureHydrated();
+    const onAll = vi.fn();
+    store.subscribeAll(onAll);
+
+    store.emit('items');
+    store.emit('flag');
+    expect(onAll).toHaveBeenCalledTimes(2); // every emit pings the wildcard
+  });
+
+  it('immutable mode installs a NEW array reference per load', async () => {
+    stubFetch({
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': () => ({ on: false }),
+    });
+    const store = createStore<Db>({
+      endpoints: { items: '/api/items', flag: '/api/flag' },
+      empty: (): Db => ({ items: [], flag: { on: false } }),
+      immutable: true,
+    });
+    await store.ensureHydrated();
+    const ref1 = store.getDb().items;
+    await store.refresh(['items']);
+    const ref2 = store.getDb().items;
+    expect(ref2).toEqual([{ id: 'a' }]);
+    expect(ref2).not.toBe(ref1); // memo-safe identity
+  });
+
+  it('snapshot(): shallow per-collection copy — mutating it never touches the store', async () => {
+    stubFetch({
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': () => ({ on: false }),
+    });
+    const store = makeStore();
+    await store.ensureHydrated();
+    const snap = store.snapshot();
+    snap.items.push({ id: 'forged' });
+    expect(store.getDb().items).toEqual([{ id: 'a' }]);
+  });
+
+  it('http facade: fetch is the raw client, write is the store-bound apiWrite', async () => {
+    let items = [{ id: 'old' }];
+    const { calls } = stubFetch({
+      'GET /api/items': () => items,
+      'GET /api/flag': () => ({ on: false }),
+      'POST /api/items': () => ({ id: 'new' }),
+    });
+    const store = makeStore();
+    await store.ensureHydrated();
+    items = [{ id: 'new' }]; // the write landed server-side…
+    await store.http.write('/api/items', { method: 'POST', json: { id: 'new' } }, ['items']);
+    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(2); // refreshed
+    expect(store.getDb().items).toEqual([{ id: 'new' }]); // …and the cache caught up
+  });
+});
