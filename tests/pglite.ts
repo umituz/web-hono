@@ -24,6 +24,48 @@ const DDL = `
     deleted_at timestamptz
   );
   CREATE UNIQUE INDEX wh_widgets_name_key ON wh_widgets (name);
+  CREATE TABLE wh_org_users (
+    id text PRIMARY KEY,
+    organization_id text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
+  CREATE TABLE wh_orgs (
+    id text PRIMARY KEY,
+    modes jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
+  CREATE TABLE wh_documents (
+    id text PRIMARY KEY,
+    number text,
+    organization_id text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
+  CREATE TABLE wh_activities (
+    id text PRIMARY KEY,
+    at timestamptz,
+    actor_id text,
+    actor_name text,
+    action text,
+    entity_type text,
+    entity_id text,
+    entity_label text,
+    changes jsonb,
+    type text,
+    severity text,
+    title text,
+    body text,
+    read boolean,
+    branch_id text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
 `;
 
 let client: PGlite | null = null;
@@ -42,6 +84,11 @@ export async function makeTestDb(): Promise<CrudDb> {
 /** Fast per-test reset: rows gone, schema/defaults kept. */
 export async function resetDb(): Promise<void> {
   if (client) await client.exec('TRUNCATE wh_widgets');
+}
+
+/** Reset for the org/activity fixtures (separate so crud resets stay minimal). */
+export async function resetOrgDb(): Promise<void> {
+  if (client) await client.exec('TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities');
 }
 
 /** Bindings the factory needs; DATABASE_URL is unused once db is injected. */
