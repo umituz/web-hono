@@ -32,8 +32,10 @@ export async function orgHasMode(db: CrudDb, orgs: OrgsLike, orgId: string, mode
 /** Next `PREFIX-n` (or `PREFIX-YYYY-NNNN` with year: true) document number:
  *  max numeric suffix +1 among the current year's live rows. Not a
  *  reservation — the partial-unique on number turns races into a 409.
- *  digitsOnly: true serves prefix-less columns that store the bare integer
- *  ("101") — prefix is ignored, non-numeric rows don't count. */
+ *  pad applies in EVERY mode — plain `pad: 4` yields `PRD-0001` and reads
+ *  padded/legacy rows alike (`PRD-9` still counts as 9). digitsOnly: true
+ *  serves prefix-less columns that store the bare integer ("101") — prefix
+ *  is ignored, non-numeric rows don't count. */
 export async function nextNumber(
   db: CrudDb,
   table: NumberedTable,
@@ -68,5 +70,6 @@ export async function nextNumber(
   }, opts.base ?? (bare ? 0 : withYear ? 0 : 2000));
   const n = max + 1;
   if (bare) return opts.pad ? String(n).padStart(opts.pad, '0') : String(n);
-  return withYear ? `${prefix}-${year}-${String(n).padStart(opts.pad ?? 4, '0')}` : `${prefix}${opts.separator ?? '-'}${n}`;
+  const body = String(n).padStart(opts.pad ?? (withYear ? 4 : 0), '0');
+  return withYear ? `${prefix}-${year}-${body}` : `${prefix}${opts.separator ?? '-'}${body}`;
 }

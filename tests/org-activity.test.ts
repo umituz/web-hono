@@ -113,6 +113,16 @@ describe('nextNumber', () => {
     expect(await nextNumber(db, documents, 'FLM', { separator: '', base: 100 })).toBe('FLM781');
     expect(await nextNumber(db, documents, 'MT', { separator: '', base: 3 })).toBe('MT4');
   });
+
+  it('plain mode honors pad and counts padded and legacy rows alike', async () => {
+    await db.insert(documents).values([
+      { id: 'd1', number: 'PRD-7', organizationId: 'org_a' },
+      { id: 'd2', number: 'PRD-0012', organizationId: 'org_a' },
+    ] as never);
+    expect(await nextNumber(db, documents, 'PRD', { base: 0, pad: 4 })).toBe('PRD-0013');
+    expect(await nextNumber(db, documents, 'PRD', { base: 0 })).toBe('PRD-13');
+    expect(await nextNumber(db, documents, 'SKU', { base: 0, pad: 4, separator: '' })).toBe('SKU0001');
+  });
 });
 
 describe('writeAudit / writeNotification', () => {
