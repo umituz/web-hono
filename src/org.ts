@@ -39,6 +39,7 @@ export async function nextNumber(
   opts: { orgId?: string; base?: number; year?: boolean; pad?: number; column?: PgColumn } = {},
 ): Promise<string> {
   const numberCol = opts.column ?? table.number;
+  if (!numberCol) throw new Error('nextNumber: no number column (pass opts.column for orderNo-style tables)');
   const conds = [];
   if (opts.orgId && table.organizationId) conds.push(eq(table.organizationId, opts.orgId));
   if (table.deletedAt) conds.push(isNull(table.deletedAt));
