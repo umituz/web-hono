@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { validateJson } from '../src/validator';
+import { actorFields, dateOnly, hhmm } from '../src/validator';
 
 const WidgetSchema = z.object({ name: z.string().trim().min(2), count: z.number().int().min(0) }).strict();
 
@@ -46,5 +47,49 @@ describe('validateJson', () => {
     const res = await post(JSON.stringify({ name: '  Gadget  ', count: 3 }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: 'Gadget', count: 3 });
+  });
+});
+
+describe('dateOnly', () => {
+  it('accepts YYYY-MM-DD', () => {
+    expect(dateOnly.safeParse('2026-10-17').success).toBe(true);
+    expect(dateOnly.safeParse('0000-01-01').success).toBe(true);
+  });
+
+  it('rejects everything else with the expected YYYY-MM-DD message', () => {
+    for (const bad of ['2026-10-7', '26-10-17', '17-10-2026', '2026/10/17', '2026-10-17T00:00', '']) {
+      const r = dateOnly.safeParse(bad);
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues[0]!.message).toBe('expected YYYY-MM-DD');
+    }
+  });
+});
+
+describe('hhmm', () => {
+  it('accepts 00:00 through 23:59', () => {
+    for (const good of ['00:00', '09:30', '23:59', '13:05']) {
+      expect(hhmm.safeParse(good).success).toBe(true);
+    }
+  });
+
+  it('rejects out-of-range and malformed times with the expected HH:MM message', () => {
+    for (const bad of ['24:00', '12:60', '9:30', '0930', '12:5', '']) {
+      const r = hhmm.safeParse(bad);
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues[0]!.message).toBe('expected HH:MM');
+    }
+  });
+});
+
+describe('actorFields', () => {
+  it('spreads into a strict schema: both fields optional, absent ok', () => {
+    const Schema = z.object({ note: z.string().min(1), ...actorFields }).strict();
+    expect(Schema.safeParse({ note: 'hi' }).success).toBe(true);
+    expect(Schema.safeParse({ note: 'hi', actorId: 'usr_1', actorName: 'Ada' })).toEqual({
+      success: true,
+      data: { note: 'hi', actorId: 'usr_1', actorName: 'Ada' },
+    });
+    expect(Schema.safeParse({ note: 'hi', actorName: 7 }).success).toBe(false);
+    expect(Schema.safeParse({ note: 'hi', extra: 1 }).success).toBe(false); // still strict
   });
 });
