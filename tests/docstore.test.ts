@@ -107,6 +107,22 @@ describe('docStore motor', () => {
     const { store } = app();
     await expect(store.listDocs(db, 'ghosts')).rejects.toThrow("Unknown collection 'ghosts'");
   });
+
+  it('putDocs bulk-loads in chunks and upserts over existing rows', async () => {
+    const { store } = app();
+    const first = await store.putDocs(db, 'docs', [
+      { id: 'b', title: 'B' },
+      { id: 'a', title: 'A' },
+    ]);
+    expect(first).toBe(2);
+    const second = await store.putDocs(db, 'docs', [{ id: 'a', title: 'A2' }, { id: 'c', title: 'C' }], 1);
+    expect(second).toBe(2);
+    expect(await store.listDocs(db, 'docs')).toEqual([
+      { id: 'a', title: 'A2' },
+      { id: 'b', title: 'B' },
+      { id: 'c', title: 'C' },
+    ]);
+  });
 });
 
 describe('docStore routes', () => {
