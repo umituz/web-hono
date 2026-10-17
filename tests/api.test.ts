@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
+import { validator } from 'hono/validator';
+import { z } from 'zod';
 import { createApi } from '../src/api';
 import { ApiError } from '../src/errors';
+import { validateJson } from '../src/validator';
 import type { ApiEnv } from '../src/env';
 
 /* The skeleton, exercised as a full Worker app: health, mounts, middleware
@@ -85,6 +88,20 @@ describe('createApi', () => {
     const res = await makeApp().app.request('/api/things/gone', undefined, env);
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'Thing not found' });
+  });
+
+  it('maps hono HTTPException (malformed JSON body) to the envelope as 400', async () => {
+    const app = createApi<ApiEnv>({
+      service: 'x',
+      routers: [['/things', (() => {
+        const r = new Hono<{ Bindings: ApiEnv }>();
+        r.post('/', validator('json', validateJson(z.object({ name: z.string() }).strict(), 'Invalid thing payload')), (c) => c.json(c.req.valid('json'), 201));
+        return r;
+      })()]],
+    });
+    const res = await app.request('/api/things', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"name": ' }, env);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'Malformed JSON in request body' });
   });
 
   it('answers a generic 500 (no leak) for unexpected throws, and logs', async () => {
