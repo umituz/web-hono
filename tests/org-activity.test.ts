@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resolveOrg, orgHasMode, nextNumber } from '../src/org';
 import { writeAudit, writeNotification } from '../src/activity';
 import { makeTestDb, resetOrgDb } from './pglite';
-import { orgUsers, orgs, documents, activities } from './helpers';
+import { orgUsers, orgs, documents, activities, workdocs, trioAudit, trioNotes } from './helpers';
 import type { CrudDb } from '../src/crud';
 
 /* REAL-database coverage (in-memory Postgres) of the org-scoped helpers
@@ -123,6 +123,16 @@ describe('nextNumber', () => {
     expect(await nextNumber(db, documents, 'PRD', { base: 0 })).toBe('PRD-13');
     expect(await nextNumber(db, documents, 'SKU', { base: 0, pad: 4, separator: '' })).toBe('SKU0001');
   });
+
+  it('scope numbers per an arbitrary FK column', async () => {
+    await db.insert(workdocs).values([
+      { id: 'w1', number: 'QS-5', workspaceId: 'ws_a' },
+      { id: 'w2', number: 'QS-9', workspaceId: 'ws_b' },
+    ] as never);
+    expect(await nextNumber(db, workdocs, 'QS', { base: 0, scope: { column: workdocs.workspaceId, value: 'ws_a' } })).toBe('QS-6');
+    expect(await nextNumber(db, workdocs, 'QS', { base: 0, scope: { column: workdocs.workspaceId, value: 'ws_b' } })).toBe('QS-10');
+    expect(await nextNumber(db, workdocs, 'QS', { base: 0, scope: { column: workdocs.workspaceId, value: 'ws_new' } })).toBe('QS-1');
+  });
 });
 
 describe('writeAudit / writeNotification', () => {
@@ -177,5 +187,27 @@ describe('writeAudit / writeNotification', () => {
     expect(rows[0].id).toMatch(/^ntf_/);
     expect(rows[0].read).toBe(false);
     expect(rows[0].at).toBeInstanceOf(Date);
+  });
+
+  it('writeAudit stamps createdAt when the table carries no at column', async () => {
+    await writeAudit(db, trioAudit, {
+      actorId: 'usr_1',
+      actorName: 'Ada',
+      action: 'quote.sent',
+      entityType: 'quote',
+      entityId: 'q_1',
+      entityLabel: 'QT-9',
+    });
+    const rows = (await db.select().from(trioAudit)) as unknown as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].createdAt).toBeInstanceOf(Date);
+  });
+
+  it('writeNotification stamps createdAt and skips read when the table has neither at nor read', async () => {
+    await writeNotification(db, trioNotes, { severity: 'info', title: 'T', body: 'B' });
+    const rows = (await db.select().from(trioNotes)) as unknown as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].createdAt).toBeInstanceOf(Date);
+    expect('read' in rows[0]).toBe(false);
   });
 });

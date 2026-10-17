@@ -66,6 +66,32 @@ const DDL = `
     updated_at timestamptz NOT NULL DEFAULT now(),
     deleted_at timestamptz
   );
+  CREATE TABLE wh_workdocs (
+    id text PRIMARY KEY,
+    number text,
+    workspace_id text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
+  CREATE TABLE wh_trio_audit (
+    id text PRIMARY KEY,
+    created_at timestamptz,
+    actor_id text,
+    actor_name text,
+    action text,
+    entity_type text,
+    entity_id text,
+    entity_label text,
+    changes jsonb
+  );
+  CREATE TABLE wh_trio_notes (
+    id text PRIMARY KEY,
+    created_at timestamptz,
+    severity text,
+    title text,
+    body text
+  );
 `;
 
 let client: PGlite | null = null;
@@ -88,7 +114,8 @@ export async function resetDb(): Promise<void> {
 
 /** Reset for the org/activity fixtures (separate so crud resets stay minimal). */
 export async function resetOrgDb(): Promise<void> {
-  if (client) await client.exec('TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities');
+  if (client)
+    await client.exec('TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities, wh_workdocs, wh_trio_audit, wh_trio_notes');
 }
 
 /** Bindings the factory needs; DATABASE_URL is unused once db is injected. */
