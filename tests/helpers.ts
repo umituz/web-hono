@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, date, jsonb, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, integer, date, jsonb, boolean, bigint } from 'drizzle-orm/pg-core';
 
 /** Test-only app table: id/text/int/timestamptz/date columns so every
  * column-type branch (pickPatch coercion, seed revive) is reachable. */
@@ -103,4 +103,24 @@ export const trioNotes = pgTable('wh_trio_notes', {
   severity: text('severity'),
   title: text('title'),
   body: text('body'),
+});
+
+/** Doc-store fixture (examora/butchera/sourcera shape): jsonb data + epoch-ms trio. */
+export const docsDocs = pgTable('wh_docstore', {
+  id: text('id').primaryKey(),
+  data: jsonb('data'),
+  createdAt: bigint('created_at', { mode: 'number' }),
+  updatedAt: bigint('updated_at', { mode: 'number' }),
+  deletedAt: bigint('deleted_at', { mode: 'number' }),
+});
+
+/** Doc-store users fixture: typed columns beside the doc body. */
+export const docsUsers = pgTable('wh_docstore_users', {
+  id: text('id').primaryKey(),
+  data: jsonb('data'),
+  email: text('email'),
+  name: text('name'),
+  createdAt: bigint('created_at', { mode: 'number' }),
+  updatedAt: bigint('updated_at', { mode: 'number' }),
+  deletedAt: bigint('deleted_at', { mode: 'number' }),
 });

@@ -11,7 +11,7 @@
  * and SPA-fallback handlers, and the ApiEnv binding types.
  *
  * Entry points:
- *   `.`           server core (this file)
+ *   `.`           server core (this file) — includes docStore (jsonb doc factories)
  *   `/types`      Row/NewRow/Serialized/ClientRow — the schema→client type bridge
  *   `/validator`  validateJson — the zod `{ error, details }` body contract
  *   `/client`     apiFetch / apiWrite — the same-origin API client
@@ -25,6 +25,8 @@ export { healthRouter } from './health';
 export { ApiError, apiOnError } from './errors';
 export { crudRoutes, listRoutes } from './crud';
 export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec } from './crud';
+export { docStore, canTransition, epoch, WorkflowError, UnknownCollectionError } from './docstore';
+export type { Doc, DocTable, DocCollectionSpec, DocStoreSpec } from './docstore';
 export { getDb } from './db';
 export { uid, pickPatch, patchTypeErrors, normalizeRow, stampUpdate, trio, actor } from './lib';
 export { resolveOrg, orgHasMode, nextNumber } from './org';

@@ -1,6 +1,6 @@
 {
   "name": "@umituz/web-hono",
-  "version": "1.7.9",
+  "version": "1.8.0",
   "description": "API backend platform for Cloudflare Workers + Neon Postgres: createApi skeleton + error envelope layer, full-CRUD resource factory (opt-in create/remove, list params), schema→client type bridge (ClientRow), apiFetch/apiWrite client, reactive fetch-backed store (+React hooks), and db lifecycle scripts (reset / snapshot / seed)",
   "type": "module",
   "main": "./src/index.ts",
