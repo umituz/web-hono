@@ -92,6 +92,22 @@ const DDL = `
     title text,
     body text
   );
+  CREATE TABLE wh_docstore (
+    id text PRIMARY KEY,
+    data jsonb,
+    created_at bigint,
+    updated_at bigint,
+    deleted_at bigint
+  );
+  CREATE TABLE wh_docstore_users (
+    id text PRIMARY KEY,
+    data jsonb,
+    email text,
+    name text,
+    created_at bigint,
+    updated_at bigint,
+    deleted_at bigint
+  );
 `;
 
 let client: PGlite | null = null;
@@ -115,7 +131,9 @@ export async function resetDb(): Promise<void> {
 /** Reset for the org/activity fixtures (separate so crud resets stay minimal). */
 export async function resetOrgDb(): Promise<void> {
   if (client)
-    await client.exec('TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities, wh_workdocs, wh_trio_audit, wh_trio_notes');
+    await client.exec(
+      'TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities, wh_workdocs, wh_trio_audit, wh_trio_notes, wh_docstore, wh_docstore_users',
+    );
 }
 
 /** Bindings the factory needs; DATABASE_URL is unused once db is injected. */
