@@ -79,3 +79,29 @@ export function pickPatch(table: PgTable, body: unknown): Record<string, unknown
   }
   return Object.keys(out).length > 0 ? out : null;
 }
+
+/**
+ * Normalizes a create payload against the table before insert: drops keys
+ * that are not table columns, turns ISO-datetime strings destined for
+ * timestamptz columns into Dates, and maps '' to NULL on nullable columns
+ * (empty form fields). The insert-side twin of pickPatch.
+ */
+export function normalizeRow(table: PgTable, input: Record<string, unknown>): Record<string, unknown> {
+  const columns = getTableColumns(table) as unknown as Record<string, { columnType: string; notNull: boolean }>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (PROTECTED_KEYS.has(key)) continue;
+    const col = columns[key];
+    if (!col || value === undefined) continue;
+    if (typeof value === 'string' && col.columnType.includes('Timestamp')) {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) continue;
+      out[key] = d;
+    } else if (value === '' && !col.notNull) {
+      out[key] = null;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}

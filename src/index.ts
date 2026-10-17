@@ -26,7 +26,7 @@ export { ApiError, apiOnError } from './errors';
 export { crudRoutes, listRoutes } from './crud';
 export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec } from './crud';
 export { getDb } from './db';
-export { uid, pickPatch, stampUpdate, trio, actor } from './lib';
+export { uid, pickPatch, normalizeRow, stampUpdate, trio, actor } from './lib';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';
 export { writeAudit, writeNotification } from './activity';

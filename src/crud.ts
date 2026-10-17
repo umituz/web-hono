@@ -6,7 +6,7 @@ import { neon } from '@neondatabase/serverless';
 import type { Context } from 'hono';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
-import { pickPatch, stampUpdate, uid } from './lib';
+import { normalizeRow, pickPatch, stampUpdate, uid } from './lib';
 import type { ApiEnv } from './env';
 
 /**
@@ -160,7 +160,7 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
       if (!parsed.success) {
         return c.json({ error: 'Invalid request body', details: parsed.error.flatten().fieldErrors }, 400);
       }
-      const body = parsed.data as Record<string, unknown>;
+      const body = normalizeRow(table, parsed.data as Record<string, unknown>);
       const db = getDb(c);
       const [row] = await db
         .insert(table)
