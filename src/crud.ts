@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { and, asc, desc, eq, getTableColumns, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-http';
+import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
 import type { Context } from 'hono';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
@@ -27,10 +28,6 @@ import type { ApiEnv } from './env';
  * the factory is for plain settings/catalog rows only.
  */
 
-/** Anything the factory can select/insert/update against — the return type
- *  of the default neon-http construction. Injected instances from other
- *  drivers (pglite, node-postgres) differ only at the type level; injection
- *  sites bypass with `as unknown as CrudDb`. */
 type RequestContext = Context<{ Bindings: ApiEnv }>;
 function defaultDb(c: RequestContext) {
   // Schema-less drizzle: the factory only runs select/insert/update, which
@@ -38,7 +35,7 @@ function defaultDb(c: RequestContext) {
   // its own instance from the request's binding instead of requiring one.
   return drizzle(neon(c.env.DATABASE_URL));
 }
-export type CrudDb = ReturnType<typeof defaultDb>;
+export type CrudDb = Pick<NeonHttpDatabase<Record<string, never>>, 'select' | 'insert' | 'update'>;
 export type CrudDbFactory = (c: RequestContext) => CrudDb;
 
 export type CrudTable = PgTable & { id: PgColumn; deletedAt: PgColumn };
