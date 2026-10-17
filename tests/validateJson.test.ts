@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { validateJson } from '../src/validator';
-import { actorFields, dateOnly, hhmm } from '../src/validator';
+import { actorFields, dateOnly, datetimeLocal, datetimeSeconds, hexColor, hhmm } from '../src/validator';
 
 const WidgetSchema = z.object({ name: z.string().trim().min(2), count: z.number().int().min(0) }).strict();
 
@@ -77,6 +77,54 @@ describe('hhmm', () => {
       const r = hhmm.safeParse(bad);
       expect(r.success).toBe(false);
       if (!r.success) expect(r.error.issues[0]!.message).toBe('expected HH:MM');
+    }
+  });
+});
+
+describe('datetimeLocal', () => {
+  it('accepts date + 00:00–23:59 minute precision', () => {
+    for (const good of ['2026-10-17T00:00', '2026-01-31T23:59', '0000-06-15T13:05']) {
+      expect(datetimeLocal.safeParse(good).success).toBe(true);
+    }
+  });
+
+  it('rejects out-of-range times, seconds, and missing pieces with the expected message', () => {
+    for (const bad of ['2026-10-17T24:00', '2026-10-17T12:60', '2026-10-17T05:30:00', '2026-10-17 05:30', '2026-10-17T5:30', '2026-10-17', '']) {
+      const r = datetimeLocal.safeParse(bad);
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues[0]!.message).toBe('expected YYYY-MM-DDTHH:MM');
+    }
+  });
+});
+
+describe('datetimeSeconds', () => {
+  it('accepts date + 00:00:00–23:59:59', () => {
+    for (const good of ['2026-10-17T00:00:00', '2026-10-17T23:59:59', '1999-12-31T06:07:08']) {
+      expect(datetimeSeconds.safeParse(good).success).toBe(true);
+    }
+  });
+
+  it('rejects minute precision, out-of-range parts, and garbage with the expected message', () => {
+    for (const bad of ['2026-10-17T23:59', '2026-10-17T23:59:60', '2026-10-17T24:00:00', '2026-10-17T12:60:00', '2026-10-17T12:00:5', '']) {
+      const r = datetimeSeconds.safeParse(bad);
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues[0]!.message).toBe('expected YYYY-MM-DDTHH:MM:SS');
+    }
+  });
+});
+
+describe('hexColor', () => {
+  it('accepts #RRGGBB in either case', () => {
+    for (const good of ['#000000', '#FFFFFF', '#3FaB07', '#ff00cc']) {
+      expect(hexColor.safeParse(good).success).toBe(true);
+    }
+  });
+
+  it('rejects 3-digit, named, unanchored, and malformed colors with the expected message', () => {
+    for (const bad of ['#fff', 'ffffff', ' #ffffff', '#ffffff ', '#gggggg', '#12345', '#1234567', '']) {
+      const r = hexColor.safeParse(bad);
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues[0]!.message).toBe('expected #RRGGBB');
     }
   });
 });
