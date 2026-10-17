@@ -90,6 +90,7 @@ describe('nextNumber', () => {
       { id: 'd2', number: 'BAT-2004', organizationId: 'org_a' },
     ] as never);
     expect(await nextNumber(db, documents, 'BAT', { orgId: 'org_a' })).toBe('BAT-2005');
+    expect(await nextNumber(db, documents, 'BAT', { orgId: 'org_a', column: documents.number })).toBe('BAT-2005');
   });
 });
 
