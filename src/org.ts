@@ -4,7 +4,7 @@ import type { CrudDb } from './crud';
 
 export type UsersLike = PgTable & { id: PgColumn; organizationId: PgColumn };
 export type OrgsLike = PgTable & { id: PgColumn; modes: PgColumn };
-export type NumberedTable = PgTable & { number: PgColumn; organizationId?: PgColumn; deletedAt?: PgColumn };
+export type NumberedTable = PgTable & { number?: PgColumn; organizationId?: PgColumn; deletedAt?: PgColumn };
 
 /** Organization of the acting user; missing actor → fallback. */
 export async function resolveOrg(
@@ -36,13 +36,14 @@ export async function nextNumber(
   db: CrudDb,
   table: NumberedTable,
   prefix: string,
-  opts: { orgId?: string; base?: number; year?: boolean; pad?: number } = {},
+  opts: { orgId?: string; base?: number; year?: boolean; pad?: number; column?: PgColumn } = {},
 ): Promise<string> {
+  const numberCol = opts.column ?? table.number;
   const conds = [];
   if (opts.orgId && table.organizationId) conds.push(eq(table.organizationId, opts.orgId));
   if (table.deletedAt) conds.push(isNull(table.deletedAt));
   const rows = await db
-    .select({ number: table.number })
+    .select({ number: numberCol })
     .from(table)
     .where(conds.length > 0 ? and(...conds) : undefined);
   const withYear = opts.year === true;
