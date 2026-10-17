@@ -1,6 +1,6 @@
 import { getTableColumns } from 'drizzle-orm';
 import { timestamp } from 'drizzle-orm/pg-core';
-import type { PgTable } from 'drizzle-orm/pg-core';
+import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 
 /** Server-side id generation: `${prefix}_${base36 timestamp}${base36 counter}`. */
 let idCounter = 0;
@@ -78,6 +78,40 @@ export function pickPatch(table: PgTable, body: unknown): Record<string, unknown
     }
   }
   return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Column-type check for schema-less patches (the crudRoutes PATCH path):
+ * a JSON value whose primitive type contradicts the column's drizzle
+ * dataType would otherwise surface as a driver 500. Returns the details
+ * object for the 400 envelope, or null when every value fits.
+ */
+export function patchTypeErrors(table: PgTable, patch: Record<string, unknown>): Record<string, string[]> | null {
+  const columns = getTableColumns(table) as unknown as Record<string, PgColumn>;
+  const errors: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    const col = columns[key];
+    if (!col) continue;
+    let msg: string | null = null;
+    switch (col.dataType) {
+      case 'string':
+        msg = typeof value === 'string' ? null : 'expected string';
+        break;
+      case 'number':
+        msg = typeof value === 'number' && Number.isFinite(value) ? null : 'expected number';
+        break;
+      case 'boolean':
+        msg = typeof value === 'boolean' ? null : 'expected boolean';
+        break;
+      case 'date':
+        msg = typeof value === 'string' || value instanceof Date ? null : 'expected date string';
+        break;
+      default:
+        break;
+    }
+    if (msg) errors[key] = [msg];
+  }
+  return Object.keys(errors).length > 0 ? errors : null;
 }
 
 /**

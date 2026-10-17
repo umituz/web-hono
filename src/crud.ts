@@ -6,7 +6,7 @@ import { neon } from '@neondatabase/serverless';
 import type { Context } from 'hono';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
-import { normalizeRow, pickPatch, stampUpdate, uid } from './lib';
+import { normalizeRow, patchTypeErrors, pickPatch, stampUpdate, uid } from './lib';
 import type { ApiEnv } from './env';
 
 /**
@@ -139,8 +139,12 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
   });
 
   router.patch(`${path}/:id`, async (c) => {
-    const patch = pickPatch(table, await c.req.json().catch(() => null));
+    const raw = await c.req.json().catch(() => undefined);
+    if (raw === undefined) return c.json({ error: 'Malformed JSON in request body' }, 400);
+    const patch = pickPatch(table, raw);
     if (!patch) return c.json({ error: 'No updatable fields' }, 400);
+    const typeDetails = patchTypeErrors(table, patch);
+    if (typeDetails) return c.json({ error: 'Invalid field types', details: typeDetails }, 400);
     const db = getDb(c);
     const [row] = await db
       .update(table)
@@ -156,7 +160,11 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
   if (spec.create) {
     const { schema, prefix, defaults } = spec.create;
     router.post(path, async (c) => {
-      const parsed = schema.safeParse(await c.req.json().catch(() => null));
+      const raw = await c.req.json().catch(() => undefined);
+      if (raw === undefined || typeof raw !== 'object' || raw === null) {
+        return c.json({ error: 'Malformed JSON in request body' }, 400);
+      }
+      const parsed = schema.safeParse(raw);
       if (!parsed.success) {
         return c.json({ error: 'Invalid request body', details: parsed.error.flatten().fieldErrors }, 400);
       }

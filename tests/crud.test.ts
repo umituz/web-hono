@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { pgTable, text } from 'drizzle-orm/pg-core';
+import { z } from 'zod';
 import { crudRoutes, listRoutes } from '../src/crud';
 import { stampUpdate } from '../src/lib';
 import { apiNotFound, spaFallback } from '../src/handlers';
@@ -9,6 +10,8 @@ import { journals, widgets } from './helpers';
 
 /** Minimal table WITHOUT the fleet time trio — stamps nothing, never 500s. */
 const bare = pgTable('wh_bare', { id: text('id').primaryKey() });
+
+const crudSchema = z.object({ name: z.string() }).strict();
 
 /* GET/PATCH success paths need a live Neon DB — they are proven by the
  * consuming app's E2E (pilot: foodora). Covered here: the paths that
@@ -31,10 +34,50 @@ describe('crudRoutes', () => {
     expect(await res.json()).toEqual({ error: 'No updatable fields' });
   });
 
-  it('PATCH with a non-JSON body answers 400, not 500', async () => {
+  it('PATCH with a non-JSON body answers the malformed-JSON envelope, not 500', async () => {
     const res = await crudApp().request('/api/widgets/w_1', { method: 'PATCH', body: 'not json' });
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'No updatable fields' });
+    expect(await res.json()).toEqual({ error: 'Malformed JSON in request body' });
+  });
+
+  it('PATCH with a value contradicting the column type answers 400 with details', async () => {
+    const res = await crudApp().request('/api/widgets/w_1', {
+      method: 'PATCH',
+      body: JSON.stringify({ count: 'abc', name: 7 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: 'Invalid field types',
+      details: { count: ['expected number'], name: ['expected string'] },
+    });
+  });
+
+  it('PATCH with fitting types passes the type gate (unchanged envelope on miss)', async () => {
+    const res = await crudApp().request('/api/ghosts/w_1', {
+      method: 'PATCH',
+      body: JSON.stringify({ count: 3 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('crudRoutes create', () => {
+  it('POST with a non-JSON body answers the malformed-JSON envelope, not Invalid request body', async () => {
+    const app = new Hono<{ Bindings: ApiEnv }>();
+    app.route(
+      '/api',
+      crudRoutes({
+        path: '/widgets',
+        table: widgets,
+        label: 'Widget',
+        create: { schema: crudSchema, prefix: 'wid' },
+      }),
+    );
+    const res = await app.request('/api/widgets', { method: 'POST', body: '{"name": ' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'Malformed JSON in request body' });
   });
 });
 
