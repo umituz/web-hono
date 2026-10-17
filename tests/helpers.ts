@@ -71,3 +71,36 @@ export const activities = pgTable('wh_activities', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
+
+/** Workspace-scoped documents (craftia shape): an arbitrary FK column — not
+ *  organizationId — carries the numbering scope. */
+export const workdocs = pgTable('wh_workdocs', {
+  id: text('id').primaryKey(),
+  number: text('number'),
+  workspaceId: text('workspace_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
+/** Trio-convention audit table (craftia shape): createdAt but NO at column. */
+export const trioAudit = pgTable('wh_trio_audit', {
+  id: text('id').primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }),
+  actorId: text('actor_id'),
+  actorName: text('actor_name'),
+  action: text('action'),
+  entityType: text('entity_type'),
+  entityId: text('entity_id'),
+  entityLabel: text('entity_label'),
+  changes: jsonb('changes'),
+});
+
+/** Trio-convention notification table: createdAt, no at, no read column. */
+export const trioNotes = pgTable('wh_trio_notes', {
+  id: text('id').primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }),
+  severity: text('severity'),
+  title: text('title'),
+  body: text('body'),
+});

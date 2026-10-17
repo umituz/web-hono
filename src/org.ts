@@ -35,13 +35,15 @@ export async function orgHasMode(db: CrudDb, orgs: OrgsLike, orgId: string, mode
  *  pad applies in EVERY mode — plain `pad: 4` yields `PRD-0001` and reads
  *  padded/legacy rows alike (`PRD-9` still counts as 9). digitsOnly: true
  *  serves prefix-less columns that store the bare integer ("101") — prefix
- *  is ignored, non-numeric rows don't count. */
+ *  is ignored, non-numeric rows don't count. scope: numbers per an arbitrary
+ *  FK column (workspaceId…) — orgId is the common instance of the same form. */
 export async function nextNumber(
   db: CrudDb,
   table: NumberedTable,
   prefix: string,
   opts: {
     orgId?: string;
+    scope?: { column: PgColumn; value: string };
     base?: number;
     year?: boolean;
     pad?: number;
@@ -54,6 +56,7 @@ export async function nextNumber(
   if (!numberCol) throw new Error('nextNumber: no number column (pass opts.column for orderNo-style tables)');
   const conds = [];
   if (opts.orgId && table.organizationId) conds.push(eq(table.organizationId, opts.orgId));
+  if (opts.scope) conds.push(eq(opts.scope.column, opts.scope.value));
   if (table.deletedAt) conds.push(isNull(table.deletedAt));
   const rows = await db
     .select({ number: numberCol })
