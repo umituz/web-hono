@@ -1,5 +1,6 @@
 import type { ErrorHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
 import type { ApiEnv } from './env';
 
@@ -63,6 +64,9 @@ export const apiOnError: ErrorHandler<{ Bindings: ApiEnv }> = (err, c) => {
       err.details !== undefined ? { error: err.message, details: err.details } : { error: err.message },
       err.status,
     );
+  }
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message }, err.status);
   }
   if (err instanceof ZodError) {
     // Safety net: validateJson normally answers inline, but a hand-rolled

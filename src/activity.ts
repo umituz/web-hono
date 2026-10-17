@@ -16,7 +16,7 @@ export interface AuditWrite {
 }
 
 export interface NotificationWrite {
-  type: string;
+  type?: string;
   severity: string;
   title: string;
   body: string;
