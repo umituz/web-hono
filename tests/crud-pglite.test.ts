@@ -96,6 +96,35 @@ describe('GET list (real DB)', () => {
     }
     expect((await app.request('/api/widgets?offset=-3', undefined, testEnv())).status).toBe(400);
   });
+
+  it('accepts multi-key orderBy arrays — ties broken by the second key', async () => {
+    await insertWidget(db, { id: 'w_1', name: 'delta', count: 2 });
+    await insertWidget(db, { id: 'w_2', name: 'alpha', count: 1 });
+    await insertWidget(db, { id: 'w_3', name: 'charlie', count: 2 });
+    await insertWidget(db, { id: 'w_4', name: 'bravo', count: 1 });
+
+    const byCountNameDesc = createApi<ApiEnv>({
+      service: 'crud-test',
+      routers: [['/', crudRoutes({
+        path: '/widgets', table: widgets, label: 'Widget',
+        orderBy: [{ col: widgets.count }, { col: widgets.name, dir: 'desc' }],
+        db: () => db,
+      })]],
+    });
+    const rows = (await (await byCountNameDesc.request('/api/widgets', undefined, testEnv())).json()) as WidgetRow[];
+    expect(rows.map((r) => r.id)).toEqual(['w_4', 'w_2', 'w_1', 'w_3']);
+
+    const listed = createApi<ApiEnv>({
+      service: 'crud-test',
+      routers: [['/', listRoutes({
+        path: '/widgets', table: widgets,
+        orderBy: [{ col: widgets.count, dir: 'desc' }, { col: widgets.name }],
+        db: () => db,
+      })]],
+    });
+    const rows2 = (await (await listed.request('/api/widgets', undefined, testEnv())).json()) as WidgetRow[];
+    expect(rows2.map((r) => r.id)).toEqual(['w_3', 'w_1', 'w_2', 'w_4']);
+  });
 });
 
 describe('PATCH (real DB)', () => {

@@ -40,6 +40,8 @@ export type CrudDbFactory = (c: RequestContext) => CrudDb;
 
 export type CrudTable = PgTable & { id: PgColumn; deletedAt: PgColumn };
 
+export type OrderSpec = { col: PgColumn; dir?: 'asc' | 'desc' };
+
 /** Opt-in POST create: zod-validated body, server-generated uid, optional
  *  request-scoped stamps (organizationId, createdBy…). */
 export interface CreateSpec {
@@ -55,8 +57,9 @@ export interface ListSpec {
   /** Path under /api, e.g. '/activities'. */
   path: string;
   table: PgTable & { deletedAt: PgColumn };
-  /** List order; defaults to insertion order. */
-  orderBy?: { col: PgColumn; dir?: 'asc' | 'desc' };
+  /** List order; defaults to insertion order. Array = multi-key
+   *  (primary first, ties broken by the next key). */
+  orderBy?: OrderSpec | ReadonlyArray<OrderSpec>;
   /** Injectable db factory (tests, Hyperdrive). Default: per-request
    *  drizzle(neon(c.env.DATABASE_URL)) — the 1.x behavior. */
   db?: CrudDbFactory;
@@ -85,7 +88,8 @@ export function listRoutes(spec: ListSpec): Hono<{ Bindings: ApiEnv }> {
   router.get(path, async (c) => {
     const db = getDb(c);
     const q = db.select().from(table).where(isNull(table.deletedAt)).$dynamic();
-    if (orderBy) q.orderBy(orderBy.dir === 'desc' ? desc(orderBy.col) : asc(orderBy.col));
+    const orders = orderBy === undefined ? [] : Array.isArray(orderBy) ? orderBy : [orderBy];
+    if (orders.length > 0) q.orderBy(...orders.map((o) => (o.dir === 'desc' ? desc(o.col) : asc(o.col))));
     return c.json(await q);
   });
 
@@ -104,20 +108,16 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
     // ?order=col | -col (leading '-' = desc) — whitelisted against the
     // table's own property columns; an explicit order overrides spec.orderBy.
     const orderParam = c.req.query('order');
-    let orderCol: PgColumn | undefined;
-    let dir: 'asc' | 'desc' = 'asc';
     if (orderParam !== undefined) {
       const wantDesc = orderParam.startsWith('-');
       const name = orderParam.slice(wantDesc ? 1 : 0);
       const found = (getTableColumns(table) as unknown as Record<string, PgColumn>)[name];
       if (!found) return c.json({ error: 'Invalid order column' }, 400);
-      orderCol = found;
-      dir = wantDesc ? 'desc' : 'asc';
+      q.orderBy(wantDesc ? desc(found) : asc(found));
     } else if (orderBy) {
-      orderCol = orderBy.col;
-      dir = orderBy.dir ?? 'asc';
+      const orders = Array.isArray(orderBy) ? orderBy : [orderBy];
+      q.orderBy(...orders.map((o) => (o.dir === 'desc' ? desc(o.col) : asc(o.col))));
     }
-    if (orderCol) q.orderBy(dir === 'desc' ? desc(orderCol) : asc(orderCol));
 
     // ?limit/&offset= — absent params add no clauses: the 1.x query exactly.
     // offset without order follows the spec/default insertion order (the
