@@ -72,6 +72,17 @@ describe('nextNumber', () => {
     expect(await nextNumber(db, documents, 'INV', { orgId: 'org_a', base: 5000 })).toBe('INV-5004');
     expect(await nextNumber(db, documents, 'INV', { base: 5000 })).toBe('INV-5010');
   });
+
+  it('year mode numbers PREFIX-YYYY-NNNN and ignores other years and pads', async () => {
+    const year = new Date().getFullYear();
+    await db.insert(documents).values([
+      { id: 'd1', number: `SO-${year}-0007`, organizationId: 'org_a' },
+      { id: 'd2', number: `SO-${year - 1}-0099`, organizationId: 'org_a' },
+      { id: 'd3', number: `SO-${year}-99`, organizationId: 'org_b' },
+    ] as never);
+    expect(await nextNumber(db, documents, 'SO', { orgId: 'org_a', year: true })).toBe(`SO-${year}-0008`);
+    expect(await nextNumber(db, documents, 'SO', { year: true, pad: 2, base: 40 })).toBe(`SO-${year}-100`);
+  });
 });
 
 describe('writeAudit / writeNotification', () => {
