@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { CrudDb } from './crud';
 
 export type UsersLike = PgTable & { id: PgColumn; organizationId: PgColumn };
 export type OrgsLike = PgTable & { id: PgColumn; modes: PgColumn };
-export type NumberedTable = PgTable & { number: PgColumn; organizationId?: PgColumn };
+export type NumberedTable = PgTable & { number: PgColumn; organizationId?: PgColumn; deletedAt?: PgColumn };
 
 /** Organization of the acting user; missing actor → fallback. */
 export async function resolveOrg(
@@ -38,8 +38,13 @@ export async function nextNumber(
   prefix: string,
   opts: { orgId?: string; base?: number; year?: boolean; pad?: number } = {},
 ): Promise<string> {
-  const q = db.select({ number: table.number }).from(table);
-  const rows = opts.orgId && table.organizationId ? await q.where(eq(table.organizationId, opts.orgId)) : await q;
+  const conds = [];
+  if (opts.orgId && table.organizationId) conds.push(eq(table.organizationId, opts.orgId));
+  if (table.deletedAt) conds.push(isNull(table.deletedAt));
+  const rows = await db
+    .select({ number: table.number })
+    .from(table)
+    .where(conds.length > 0 ? and(...conds) : undefined);
   const withYear = opts.year === true;
   const year = new Date().getFullYear();
   const pat = withYear ? new RegExp(`^${prefix}-${year}-(\\d+)$`) : new RegExp(`^${prefix}-(\\d+)$`);
