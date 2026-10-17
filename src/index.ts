@@ -5,10 +5,10 @@
  * Apps keep their schema (with TABLE_PREFIX), domain routers, zod schemas,
  * and business rules — this package owns the cross-cutting skeleton:
  * the createApi app factory, the error envelope layer, the full-CRUD
- * resource factory, getDb, the uid/pickPatch/stampUpdate/trio helpers,
- * the org-scoped lookups (resolveOrg/orgHasMode/nextNumber), the audit
- * and notification writes, the JSON-404 and SPA-fallback handlers, and
- * the ApiEnv binding types.
+ * resource factory, getDb, the uid/pickPatch/stampUpdate/trio/actor
+ * helpers, the org-scoped lookups (resolveOrg/orgHasMode/nextNumber),
+ * the audit and notification writes, findRow/softDelete, the JSON-404
+ * and SPA-fallback handlers, and the ApiEnv binding types.
  *
  * Entry points:
  *   `.`           server core (this file)
@@ -26,10 +26,12 @@ export { ApiError, apiOnError } from './errors';
 export { crudRoutes, listRoutes } from './crud';
 export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec } from './crud';
 export { getDb } from './db';
-export { uid, pickPatch, stampUpdate, trio } from './lib';
+export { uid, pickPatch, stampUpdate, trio, actor } from './lib';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';
 export { writeAudit, writeNotification } from './activity';
 export type { ActivityTable, AuditWrite, NotificationWrite } from './activity';
+export { findRow, softDelete } from './rows';
+export type { AliveTable } from './rows';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';

@@ -32,6 +32,14 @@ export class ApiError extends Error {
   static badRequest(message: string, details?: unknown): ApiError {
     return new ApiError(400, message, details);
   }
+
+  static forbidden(message: string): ApiError {
+    return new ApiError(403, message);
+  }
+
+  static conflict(message: string): ApiError {
+    return new ApiError(409, message);
+  }
 }
 
 /**
