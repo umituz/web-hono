@@ -92,6 +92,27 @@ describe('nextNumber', () => {
     expect(await nextNumber(db, documents, 'BAT', { orgId: 'org_a' })).toBe('BAT-2005');
     expect(await nextNumber(db, documents, 'BAT', { orgId: 'org_a', column: documents.number })).toBe('BAT-2005');
   });
+
+  it('digitsOnly serves bare-integer columns and skips non-numeric rows', async () => {
+    await db.insert(documents).values([
+      { id: 'd1', number: '104', organizationId: 'org_a' },
+      { id: 'd2', number: '101', organizationId: 'org_a' },
+      { id: 'd3', number: 'H-9', organizationId: 'org_a' },
+    ] as never);
+    expect(await nextNumber(db, documents, '', { digitsOnly: true, base: 100 })).toBe('105');
+    expect(await nextNumber(db, documents, '', { digitsOnly: true })).toBe('105');
+    expect(await nextNumber(db, documents, '', { digitsOnly: true, pad: 4, base: 100 })).toBe('0105');
+    expect(await nextNumber(db, documents, '', { digitsOnly: true, orgId: 'org_ghost' })).toBe('1');
+  });
+
+  it('separator: "" produces glued PREFIXn and only counts glued rows', async () => {
+    await db.insert(documents).values([
+      { id: 'd1', number: 'FLM780', organizationId: 'org_a' },
+      { id: 'd2', number: 'FL-99', organizationId: 'org_a' },
+    ] as never);
+    expect(await nextNumber(db, documents, 'FLM', { separator: '', base: 100 })).toBe('FLM781');
+    expect(await nextNumber(db, documents, 'MT', { separator: '', base: 3 })).toBe('MT4');
+  });
 });
 
 describe('writeAudit / writeNotification', () => {

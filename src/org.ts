@@ -31,12 +31,22 @@ export async function orgHasMode(db: CrudDb, orgs: OrgsLike, orgId: string, mode
 
 /** Next `PREFIX-n` (or `PREFIX-YYYY-NNNN` with year: true) document number:
  *  max numeric suffix +1 among the current year's live rows. Not a
- *  reservation — the partial-unique on number turns races into a 409. */
+ *  reservation — the partial-unique on number turns races into a 409.
+ *  digitsOnly: true serves prefix-less columns that store the bare integer
+ *  ("101") — prefix is ignored, non-numeric rows don't count. */
 export async function nextNumber(
   db: CrudDb,
   table: NumberedTable,
   prefix: string,
-  opts: { orgId?: string; base?: number; year?: boolean; pad?: number; column?: PgColumn } = {},
+  opts: {
+    orgId?: string;
+    base?: number;
+    year?: boolean;
+    pad?: number;
+    column?: PgColumn;
+    digitsOnly?: boolean;
+    separator?: string;
+  } = {},
 ): Promise<string> {
   const numberCol = opts.column ?? table.number;
   if (!numberCol) throw new Error('nextNumber: no number column (pass opts.column for orderNo-style tables)');
@@ -47,13 +57,16 @@ export async function nextNumber(
     .select({ number: numberCol })
     .from(table)
     .where(conds.length > 0 ? and(...conds) : undefined);
-  const withYear = opts.year === true;
+  const bare = opts.digitsOnly === true;
+  const withYear = !bare && opts.year === true;
   const year = new Date().getFullYear();
-  const pat = withYear ? new RegExp(`^${prefix}-${year}-(\\d+)$`) : new RegExp(`^${prefix}-(\\d+)$`);
+  const sep = bare ? '' : (opts.separator ?? '-').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pat = bare ? /^(\d+)$/ : withYear ? new RegExp(`^${prefix}-${year}-(\\d+)$`) : new RegExp(`^${prefix}${sep}(\\d+)$`);
   const max = rows.reduce((m, r) => {
     const n = pat.exec(String(r.number ?? ''))?.[1];
     return n ? Math.max(m, Number(n)) : m;
-  }, opts.base ?? (withYear ? 0 : 2000));
+  }, opts.base ?? (bare ? 0 : withYear ? 0 : 2000));
   const n = max + 1;
-  return withYear ? `${prefix}-${year}-${String(n).padStart(opts.pad ?? 4, '0')}` : `${prefix}-${n}`;
+  if (bare) return opts.pad ? String(n).padStart(opts.pad, '0') : String(n);
+  return withYear ? `${prefix}-${year}-${String(n).padStart(opts.pad ?? 4, '0')}` : `${prefix}${opts.separator ?? '-'}${n}`;
 }
