@@ -6,7 +6,9 @@
  * and business rules — this package owns the cross-cutting skeleton:
  * the createApi app factory, the error envelope layer, the full-CRUD
  * resource factory, getDb, the uid/pickPatch/stampUpdate/trio helpers,
- * the JSON-404 and SPA-fallback handlers, and the ApiEnv binding types.
+ * the org-scoped lookups (resolveOrg/orgHasMode/nextNumber), the audit
+ * and notification writes, the JSON-404 and SPA-fallback handlers, and
+ * the ApiEnv binding types.
  *
  * Entry points:
  *   `.`           server core (this file)
@@ -25,5 +27,9 @@ export { crudRoutes, listRoutes } from './crud';
 export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec } from './crud';
 export { getDb } from './db';
 export { uid, pickPatch, stampUpdate, trio } from './lib';
+export { resolveOrg, orgHasMode, nextNumber } from './org';
+export type { UsersLike, OrgsLike, NumberedTable } from './org';
+export { writeAudit, writeNotification } from './activity';
+export type { ActivityTable, AuditWrite, NotificationWrite } from './activity';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';
