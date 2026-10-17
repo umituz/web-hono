@@ -83,6 +83,14 @@ describe('nextNumber', () => {
     expect(await nextNumber(db, documents, 'SO', { orgId: 'org_a', year: true })).toBe(`SO-${year}-0008`);
     expect(await nextNumber(db, documents, 'SO', { year: true, pad: 2, base: 40 })).toBe(`SO-${year}-100`);
   });
+
+  it('ignores soft-deleted rows when the table carries deletedAt', async () => {
+    await db.insert(documents).values([
+      { id: 'd1', number: 'BAT-2009', organizationId: 'org_a', deletedAt: new Date() },
+      { id: 'd2', number: 'BAT-2004', organizationId: 'org_a' },
+    ] as never);
+    expect(await nextNumber(db, documents, 'BAT', { orgId: 'org_a' })).toBe('BAT-2005');
+  });
 });
 
 describe('writeAudit / writeNotification', () => {
