@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
 import { validator } from 'hono/validator';
@@ -122,6 +122,26 @@ export function docStore(spec: DocStoreSpec) {
         target: [col.table.id],
         set: { updatedAt: values.updatedAt, deletedAt: null, data: values.data } as never,
       });
+  }
+
+  /** Trusted bulk load for seed scripts: chunked multi-row upsert with the
+   *  same revive semantics as putDoc, without per-row workflow/singleton
+   *  guards (seeds write fresh, consistent datasets by construction). */
+  async function putDocs(db: CrudDb, key: string, docs: readonly Doc[], chunkSize = 200): Promise<number> {
+    const col = requireSpec(key);
+    let count = 0;
+    for (let i = 0; i < docs.length; i += chunkSize) {
+      const chunk = docs.slice(i, i + chunkSize).map((doc) => rowValues(col, doc, Date.now()));
+      await db
+        .insert(col.table)
+        .values(chunk as never)
+        .onConflictDoUpdate({
+          target: [col.table.id],
+          set: { updatedAt: sql`excluded.updated_at`, deletedAt: null, data: sql`excluded.data` } as never,
+        });
+      count += chunk.length;
+    }
+    return count;
   }
 
   async function patchDoc(db: CrudDb, key: string, id: string, patch: Doc): Promise<Doc | undefined> {
@@ -274,6 +294,7 @@ export function docStore(spec: DocStoreSpec) {
     router,
     collectionOf,
     putDoc,
+    putDocs,
     patchDoc,
     softDeleteDoc,
     listDocs,
