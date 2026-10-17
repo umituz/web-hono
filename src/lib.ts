@@ -9,6 +9,11 @@ export function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${idCounter.toString(36)}`;
 }
 
+/** Write-schema actor pair with the fleet defaults. */
+export function actor(input: { actorId?: string; actorName?: string }, name = 'Back office'): { actorId: string; actorName: string } {
+  return { actorId: input.actorId ?? 'api', actorName: input.actorName ?? name };
+}
+
 /**
  * Fleet time-trio columns for timestamptz tables — spread into a pgTable
  * definition: `{ id: text('id').primaryKey(), name: text('name'), ...trio() }`.
