@@ -135,6 +135,137 @@ describe('docStore motor', () => {
   });
 });
 
+describe('docStore validate hook', () => {
+  it('sees existing on updates and undefined on fresh inserts', async () => {
+    const seen: Array<{ docTitle: unknown; existingTitle: unknown }> = [];
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          validate: ({ doc, existing }) => {
+            seen.push({ docTitle: doc.title, existingTitle: existing?.title });
+          },
+        },
+      ],
+      db: () => db,
+    });
+    await store.putDoc(db, 'docs', { id: 'a', title: 'A' });
+    await store.putDoc(db, 'docs', { id: 'a', title: 'B' });
+    expect(seen).toEqual([
+      { docTitle: 'A', existingTitle: undefined },
+      { docTitle: 'B', existingTitle: 'A' },
+    ]);
+  });
+
+  it('rejects the write when the guard throws and leaves the row untouched', async () => {
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          validate: ({ doc }) => {
+            if (doc.title === 'bad') throw new WorkflowError('bad title');
+          },
+        },
+      ],
+      db: () => db,
+    });
+    await store.putDoc(db, 'docs', { id: 'a', title: 'ok' });
+    await expect(store.putDoc(db, 'docs', { id: 'a', title: 'bad' })).rejects.toThrow('bad title');
+    expect((await store.getDoc(db, 'docs', 'a'))!.title).toBe('ok');
+  });
+
+  it('validates the merged doc on PATCH', async () => {
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          validate: ({ doc }) => {
+            if (doc.title === 'bad') throw new WorkflowError('bad title');
+          },
+        },
+      ],
+      db: () => db,
+    });
+    await store.putDoc(db, 'docs', { id: 'a', title: 'ok' });
+    await expect(store.patchDoc(db, 'docs', 'a', { title: 'bad' } as never)).rejects.toThrow('bad title');
+    expect((await store.getDoc(db, 'docs', 'a'))!.title).toBe('ok');
+  });
+
+  it('supports async cross-doc guards reading through the db', async () => {
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          validate: async ({ db: conn, doc }) => {
+            const all = await store.listDocs(conn, 'docs');
+            if (all.some((d) => d.id !== doc.id && d.title === doc.title)) {
+              throw new WorkflowError('Title already used');
+            }
+          },
+        },
+      ],
+      db: () => db,
+    });
+    await store.putDoc(db, 'docs', { id: 'a', title: 'X' });
+    await expect(store.putDoc(db, 'docs', { id: 'b', title: 'X' })).rejects.toThrow('Title already used');
+    await store.putDoc(db, 'docs', { id: 'b', title: 'Y' });
+    expect(await store.listDocs(db, 'docs')).toHaveLength(2);
+  });
+
+  it('guards batch puts with the partial-progress envelope', async () => {
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          validate: ({ doc }) => {
+            if ((doc as { boom?: boolean }).boom) throw new WorkflowError('boom');
+          },
+        },
+      ],
+      db: () => db,
+    });
+    const hono = new Hono<{ Bindings: ApiEnv }>();
+    hono.route('/data', store.router);
+    const res = await hono.request('/data/batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        ops: [
+          { op: 'put', collection: 'docs', doc: { id: 'a', title: 'A' } },
+          { op: 'put', collection: 'docs', doc: { id: 'b', boom: true } },
+        ],
+      }),
+      headers: { 'content-type': 'application/json' },
+    }, testEnv());
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ applied: 1, error: 'boom' });
+  });
+
+  it('putDocs seed loads bypass the guard', async () => {
+    let calls = 0;
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          validate: () => {
+            calls += 1;
+          },
+        },
+      ],
+      db: () => db,
+    });
+    await store.putDocs(db, 'docs', [{ id: 'a' }, { id: 'b' }]);
+    expect(calls).toBe(0);
+    await store.putDoc(db, 'docs', { id: 'c' });
+    expect(calls).toBe(1);
+  });
+});
+
 describe('docStore routes', () => {
   it('serves the doc-verbatim list and unknown-collection 404', async () => {
     const { hono, store } = app();

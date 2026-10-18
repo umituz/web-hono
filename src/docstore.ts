@@ -20,8 +20,8 @@ import type { ApiEnv } from './env';
  * One call returns the router (GET list / GET-PUT-PATCH-DELETE by id /
  * POST /batch) AND the motor functions (putDoc/patchDoc/softDeleteDoc/
  * listDocs/getDoc) that seed scripts and server-side workflows call
- * directly. Status machines ride along as declarative `transitions` maps;
- * violations surface as WorkflowError → 400.
+ * directly. Status machines ride along as declarative `transitions` maps and
+ * write guards as `validate` hooks; violations surface as WorkflowError → 400.
  */
 
 type RequestContext = Context<{ Bindings: ApiEnv }>;
@@ -29,6 +29,16 @@ type RequestContext = Context<{ Bindings: ApiEnv }>;
 export type Doc = Record<string, unknown> & { id: string };
 
 export type DocTable = PgTable & { id: PgColumn; data: PgColumn; deletedAt: PgColumn };
+
+/**
+ * Cross-cutting write guard: runs inside putDoc before the write, covering
+ * every path that funnels through it (PUT, PATCH-merged, batch puts,
+ * server-side calls) but never putDocs seeds. Receives the incoming doc,
+ * the current row when one exists, and the db for cross-collection reads
+ * (booking-conflict style rules). Throw WorkflowError (or ApiError) to
+ * reject the write.
+ */
+export type DocValidateFn = (args: { db: CrudDb; doc: Doc; existing?: Doc }) => void | Promise<void>;
 
 export interface DocCollectionSpec {
   /** Wire collection name — the URL segment and the batch op key. */
@@ -42,6 +52,8 @@ export interface DocCollectionSpec {
   transitions?: Record<string, string[]>;
   /** Doc field the transitions guard reads. Default 'status' (fuelora: state, franchisia: stage). */
   statusKey?: string;
+  /** Write guard — see DocValidateFn. */
+  validate?: DocValidateFn;
 }
 
 export interface DocStoreSpec {
@@ -102,20 +114,24 @@ export function docStore(spec: DocStoreSpec) {
       throw new WorkflowError(`Singleton collection '${key}' must use id '${col.singletonId}'`);
     }
     const guard = col.transitions;
-    if (guard) {
-      const statusKey = col.statusKey ?? 'status';
-      const [existing] = await db
+    if (guard || col.validate) {
+      const [existingRow] = await db
         .select({ data: col.table.data })
         .from(col.table)
         .where(and(eq(col.table.id, String(doc.id)), isNull(col.table.deletedAt)))
         .limit(1);
-      if (existing) {
-        const from = (existing.data as Doc)[statusKey];
-        const to = doc[statusKey];
-        if (typeof from === 'string' && typeof to === 'string' && !canTransition(guard, from, to)) {
-          throw new WorkflowError(`Invalid ${key} transition ${from} → ${to}`);
+      const existing = existingRow?.data as Doc | undefined;
+      if (guard) {
+        const statusKey = col.statusKey ?? 'status';
+        if (existing) {
+          const from = existing[statusKey];
+          const to = doc[statusKey];
+          if (typeof from === 'string' && typeof to === 'string' && !canTransition(guard, from, to)) {
+            throw new WorkflowError(`Invalid ${key} transition ${from} → ${to}`);
+          }
         }
       }
+      await col.validate?.({ db, doc, existing });
     }
     const values = rowValues(col, doc, Date.now());
     await db
