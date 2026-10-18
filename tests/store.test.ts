@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore, REFETCH_ALL } from '../src/store';
 
 /* The store machine is exercised entirely through a stubbed fetch — no
-   server, no React. foodora is the live E2E proof; these tests pin the
+   server, no React; these tests pin the
    contract: hydrate-once, selective refresh, pub/sub, write-then-refresh. */
 
 interface Row {

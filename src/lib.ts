@@ -43,7 +43,7 @@ function localDateStamp(): string {
  * updatedAt stamp matching the table's column type. Fleet-standard tables
  * (timestamp withTimezone) get a Date — unchanged from previous versions.
  * Domains that model updatedAt as a calendar date column (date string,
- * e.g. polaris) get today's local 'YYYY-MM-DD' instead of a Date that the
+ * date-string) get today's local 'YYYY-MM-DD' instead of a Date that the
  * column cannot carry.
  */
 export function stampUpdate(table: PgTable): Record<string, unknown> {

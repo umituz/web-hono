@@ -13,7 +13,7 @@ export const widgets = pgTable('wh_widgets', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Date-string-stamped table (polaris convention): updatedAt is a calendar
+/** Date-string-stamped table: updatedAt is a calendar
  *  date column, so the update stamp must be a 'YYYY-MM-DD' string. */
 export const journals = pgTable('wh_journals', {
   id: text('id').primaryKey(),
@@ -72,7 +72,7 @@ export const activities = pgTable('wh_activities', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Workspace-scoped documents (craftia shape): an arbitrary FK column — not
+/** Workspace-scoped documents: an arbitrary FK column — not
  *  organizationId — carries the numbering scope. */
 export const workdocs = pgTable('wh_workdocs', {
   id: text('id').primaryKey(),
@@ -83,7 +83,7 @@ export const workdocs = pgTable('wh_workdocs', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Trio-convention audit table (craftia shape): createdAt but NO at column. */
+/** Trio-convention audit table: createdAt but NO at column. */
 export const trioAudit = pgTable('wh_trio_audit', {
   id: text('id').primaryKey(),
   createdAt: timestamp('created_at', { withTimezone: true }),
@@ -105,7 +105,7 @@ export const trioNotes = pgTable('wh_trio_notes', {
   body: text('body'),
 });
 
-/** Doc-store fixture (examora/butchera/sourcera shape): jsonb data + epoch-ms trio. */
+/** Doc-store fixture: jsonb data + epoch-ms trio. */
 export const docsDocs = pgTable('wh_docstore', {
   id: text('id').primaryKey(),
   data: jsonb('data'),

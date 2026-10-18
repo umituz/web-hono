@@ -8,11 +8,11 @@ describe('isoNow precision', () => {
     expect(isoNow()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 
-  it("truncates to seconds — notaria's wire format", () => {
+  it('truncates to seconds', () => {
     expect(isoNow('s')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
 
-  it("truncates to minutes — merchora's wire format", () => {
+  it('truncates to minutes', () => {
     expect(isoNow('m')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 
@@ -36,7 +36,7 @@ describe('isoAt', () => {
     expect(isoAt(d, 'd')).toBe('2026-10-18');
   });
 
-  it('covers the fleet offset pattern — now + N days, seconds precision', () => {
+  it('covers the offset pattern — now + N days, seconds precision', () => {
     const expected = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 19);
     expect(isoAt(new Date(Date.now() + 5 * 86_400_000), 's')).toBe(expected);
   });

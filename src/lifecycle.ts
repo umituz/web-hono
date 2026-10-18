@@ -8,13 +8,13 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 /**
  * Database lifecycle for the shared-Neon-project fleet model: one Neon
  * project hosts many products, each living in its own `TABLE_PREFIX*`
- * tables. `specs` is the app's single table registry (foodora's
+ * tables. `specs` is the app's single table registry (the
  * `scripts/tables.ts` shape) shared by all three operations so snapshot
  * and seed can never diverge.
  */
 
 export interface TableSpec {
-  /** Snapshot/seed key AND the SQL table name — e.g. 'users' for `foodora_users`. */
+  /** Snapshot/seed key AND the SQL table name — e.g. 'users' for `prefix_users`. */
   name: string;
   table: PgTable;
 }

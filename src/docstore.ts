@@ -50,7 +50,7 @@ export interface DocCollectionSpec {
   singletonId?: string;
   /** Status state machine: allowed targets per current status. */
   transitions?: Record<string, string[]>;
-  /** Doc field the transitions guard reads. Default 'status' (fuelora: state, franchisia: stage). */
+  /** Doc field the transitions guard reads. Default 'status'. */
   statusKey?: string;
   /** Write guard — see DocValidateFn. */
   validate?: DocValidateFn;

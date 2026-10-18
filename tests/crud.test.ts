@@ -14,7 +14,7 @@ const bare = pgTable('wh_bare', { id: text('id').primaryKey() });
 const crudSchema = z.object({ name: z.string() }).strict();
 
 /* GET/PATCH success paths need a live Neon DB — they are proven by the
- * consuming app's E2E (pilot: foodora). Covered here: the paths that
+ * consuming app's E2E. Covered here: the paths that
  * short-circuit BEFORE any DB call, plus the two app-closing handlers. */
 
 function crudApp() {
