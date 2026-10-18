@@ -30,7 +30,7 @@ export { docStore, canTransition, epoch, WorkflowError, UnknownCollectionError }
 export type { Doc, DocTable, DocCollectionSpec, DocStoreSpec, DocValidateFn } from './docstore';
 export { getDb } from './db';
 export { uid, pickPatch, patchTypeErrors, normalizeRow, stampUpdate, trio, actor } from './lib';
-export { isoNow, todayISO, addDaysISO } from './dates';
+export { isoNow, isoAt, todayISO, addDaysISO } from './dates';
 export type { IsoPrecision } from './dates';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';

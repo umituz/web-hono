@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDaysISO, isoNow, todayISO } from '../src/dates';
+import { addDaysISO, isoAt, isoNow, todayISO } from '../src/dates';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -12,7 +12,7 @@ describe('isoNow precision', () => {
     expect(isoNow('s')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
 
-  it("truncates to minutes — influencera's wire format", () => {
+  it("truncates to minutes — merchora's wire format", () => {
     expect(isoNow('m')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 
@@ -27,6 +27,21 @@ describe('isoNow precision', () => {
   });
 });
 
+describe('isoAt', () => {
+  it('formats an arbitrary instant with the same precision contract', () => {
+    const d = new Date('2026-10-18T05:28:47.941Z');
+    expect(isoAt(d)).toBe('2026-10-18T05:28:47.941Z');
+    expect(isoAt(d, 's')).toBe('2026-10-18T05:28:47');
+    expect(isoAt(d, 'm')).toBe('2026-10-18T05:28');
+    expect(isoAt(d, 'd')).toBe('2026-10-18');
+  });
+
+  it('covers the fleet offset pattern — now + N days, seconds precision', () => {
+    const expected = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 19);
+    expect(isoAt(new Date(Date.now() + 5 * 86_400_000), 's')).toBe(expected);
+  });
+});
+
 describe('todayISO', () => {
   it('is the UTC calendar day, identical to isoNow("d")', () => {
     expect(todayISO()).toMatch(DAY);
@@ -36,18 +51,21 @@ describe('todayISO', () => {
 
 describe('addDaysISO', () => {
   it('returns a calendar-day string', () => {
-    expect(addDaysISO(7)).toMatch(DAY);
+    expect(addDaysISO(todayISO(), 7)).toMatch(DAY);
   });
 
-  it('moves exactly N days away from today', () => {
-    const base = Date.parse(`${todayISO()}T00:00:00Z`);
-    expect(Date.parse(`${addDaysISO(3)}T00:00:00Z`)).toBe(base + 3 * 86_400_000);
-    expect(Date.parse(`${addDaysISO(-3)}T00:00:00Z`)).toBe(base - 3 * 86_400_000);
+  it('shifts a base date exactly N days', () => {
+    expect(addDaysISO('2026-10-18', 3)).toBe('2026-10-21');
+    expect(addDaysISO('2026-10-18', -3)).toBe('2026-10-15');
   });
 
   it('rolls over months and years via UTC calendar math', () => {
-    const base = Date.parse(`${todayISO()}T00:00:00Z`);
-    expect(Date.parse(`${addDaysISO(45)}T00:00:00Z`)).toBe(base + 45 * 86_400_000);
-    expect(Date.parse(`${addDaysISO(400)}T00:00:00Z`)).toBe(base + 400 * 86_400_000);
+    expect(addDaysISO('2026-10-28', 45)).toBe('2026-12-12');
+    expect(addDaysISO('2026-12-28', 400)).toBe('2028-02-01');
+    expect(addDaysISO('2024-02-27', 3)).toBe('2024-03-01');
+  });
+
+  it('ignores any time component a wire date drags along', () => {
+    expect(addDaysISO('2026-10-18T05:28:47.941Z', 1)).toBe('2026-10-19');
   });
 });
