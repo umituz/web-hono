@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { ApiError, apiOnError } from '../src/errors';
+import { ApiError, apiOnError, isUniqueViolation } from '../src/errors';
 import type { ApiEnv } from '../src/env';
 
 /* The onError matrix, exercised through a real Hono app that throws. */
@@ -48,6 +48,18 @@ describe('ApiError', () => {
     expect(ApiError.notFound('Product').message).toBe('Product not found');
     expect(ApiError.notFound('Product').status).toBe(404);
     expect(ApiError.badRequest('No updatable fields').status).toBe(400);
+  });
+});
+
+describe('isUniqueViolation', () => {
+  it('detects the code directly and through a cause chain', () => {
+    const direct = new Error('duplicate key') as Error & { code: string };
+    direct.code = '23505';
+    expect(isUniqueViolation(direct)).toBe(true);
+    const nested = new Error('driver wrapped', { cause: direct });
+    expect(isUniqueViolation(nested)).toBe(true);
+    expect(isUniqueViolation(new Error('other'))).toBe(false);
+    expect(isUniqueViolation(null)).toBe(false);
   });
 });
 

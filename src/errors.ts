@@ -48,7 +48,7 @@ export class ApiError extends Error {
  * node-postgres) or nested in a driver cause-chain (neon-http). Depth-capped
  * walk so malformed causes can't loop.
  */
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   let e: unknown = err;
   for (let depth = 0; e !== null && typeof e === 'object' && depth < 3; depth += 1) {
     if ((e as { code?: unknown }).code === '23505') return true;
