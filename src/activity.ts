@@ -1,4 +1,4 @@
-import { getTableColumns } from 'drizzle-orm';
+import { eq, getTableColumns } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { uid } from './lib';
 import type { CrudDb } from './crud';
@@ -18,7 +18,7 @@ export interface AuditWrite {
 
 export interface NotificationWrite {
   type?: string;
-  severity: string;
+  severity?: string;
   title: string;
   body: string;
   entityType?: string;
@@ -26,14 +26,26 @@ export interface NotificationWrite {
   [extra: string]: unknown;
 }
 
-type Columns = Record<string, { columnType: string }>;
+export interface NotificationOpts {
+  prefix?: string;
+  dedupe?: { column: PgColumn; value: unknown };
+}
+
+type ColumnMeta = { columnType?: string };
+type Columns = Record<string, ColumnMeta>;
 
 /** Stamps the first present time column — the fleet's `at` plain tables and
  *  the trio-convention (`createdAt`) tables are both served; tables with
- *  neither rely on their column defaults. */
-function timeStamp(table: ActivityTable, candidates: string[]): Record<string, Date> {
+ *  neither rely on their column defaults. Text time columns receive the ISO
+ *  string form, timestamp columns the Date object. */
+function timeStamp(table: ActivityTable, candidates: string[]): Record<string, Date | string> {
   const columns = getTableColumns(table) as unknown as Columns;
-  for (const name of candidates) if (columns[name]) return { [name]: new Date() };
+  for (const name of candidates) {
+    const meta = columns[name];
+    if (!meta) continue;
+    const kind = meta.columnType ?? '';
+    return { [name]: kind.includes('Text') || kind.includes('Varchar') ? new Date().toISOString() : new Date() };
+  }
   return {};
 }
 
@@ -50,7 +62,13 @@ export async function writeNotification(
   db: CrudDb,
   table: ActivityTable,
   n: NotificationWrite,
-  prefix = 'ntf',
-): Promise<void> {
-  await db.insert(table).values({ id: uid(prefix), ...timeStamp(table, ['at', 'createdAt']), ...boolStamp(table, 'read', false), ...n } as never);
+  opts: string | NotificationOpts = {},
+): Promise<boolean> {
+  const o = typeof opts === 'string' ? { prefix: opts } : opts;
+  if (o.dedupe) {
+    const [dupe] = await db.select({ id: table.id }).from(table).where(eq(o.dedupe.column, o.dedupe.value)).limit(1);
+    if (dupe) return false;
+  }
+  await db.insert(table).values({ id: uid(o.prefix ?? 'ntf'), ...timeStamp(table, ['at', 'createdAt']), ...boolStamp(table, 'read', false), ...n } as never);
+  return true;
 }

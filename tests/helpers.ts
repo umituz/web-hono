@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, date, jsonb, boolean, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, integer, date, jsonb, boolean, bigint, primaryKey } from 'drizzle-orm/pg-core';
 
 /** Test-only app table: id/text/int/timestamptz/date columns so every
  * column-type branch (pickPatch coercion, seed revive) is reachable. */
@@ -123,4 +123,28 @@ export const docsUsers = pgTable('wh_docstore_users', {
   createdAt: bigint('created_at', { mode: 'number' }),
   updatedAt: bigint('updated_at', { mode: 'number' }),
   deletedAt: bigint('deleted_at', { mode: 'number' }),
+});
+
+/** Doc-store scoped fixture: composite (facility_id, id) primary key — the
+ *  same doc ids live once per facility. */
+export const docsScoped = pgTable(
+  'wh_docstore_scoped',
+  {
+    id: text('id'),
+    facilityId: text('facility_id'),
+    data: jsonb('data'),
+    createdAt: bigint('created_at', { mode: 'number' }),
+    updatedAt: bigint('updated_at', { mode: 'number' }),
+    deletedAt: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.facilityId, t.id] })],
+);
+
+/** Text-`at` notification fixture: wall-clock ISO strings, not timestamps. */
+export const textNotes = pgTable('wh_text_notes', {
+  id: text('id').primaryKey(),
+  at: text('at'),
+  severity: text('severity'),
+  title: text('title'),
+  body: text('body'),
 });

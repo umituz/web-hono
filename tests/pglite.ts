@@ -108,6 +108,22 @@ const DDL = `
     updated_at bigint,
     deleted_at bigint
   );
+  CREATE TABLE wh_docstore_scoped (
+    id text,
+    facility_id text,
+    data jsonb,
+    created_at bigint,
+    updated_at bigint,
+    deleted_at bigint,
+    PRIMARY KEY (facility_id, id)
+  );
+  CREATE TABLE wh_text_notes (
+    id text PRIMARY KEY,
+    at text,
+    severity text,
+    title text,
+    body text
+  );
 `;
 
 let client: PGlite | null = null;
@@ -132,7 +148,7 @@ export async function resetDb(): Promise<void> {
 export async function resetOrgDb(): Promise<void> {
   if (client)
     await client.exec(
-      'TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities, wh_workdocs, wh_trio_audit, wh_trio_notes, wh_docstore, wh_docstore_users',
+      'TRUNCATE wh_org_users, wh_orgs, wh_documents, wh_activities, wh_workdocs, wh_trio_audit, wh_trio_notes, wh_docstore, wh_docstore_users, wh_docstore_scoped, wh_text_notes',
     );
 }
 

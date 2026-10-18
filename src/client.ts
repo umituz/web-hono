@@ -1,6 +1,21 @@
-/* Minimal JSON client for a same-origin Hono API. Throws an Error carrying
-   the server's message (zod/404/400 bodies are `{ error }`) so UI toast
-   handlers can surface it directly. */
+export class ApiClientError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+  readonly details?: unknown;
+  readonly conflicts?: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = 'ApiClientError';
+    this.status = status;
+    this.body = body;
+    if (body && typeof body === 'object') {
+      const rec = body as Record<string, unknown>;
+      if ('details' in rec) this.details = rec.details;
+      if ('conflicts' in rec) this.conflicts = rec.conflicts;
+    }
+  }
+}
 
 export async function apiFetch<T>(path: string, init: { method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; json?: unknown } = {}): Promise<T> {
   const res = await fetch(path, {
@@ -10,7 +25,7 @@ export async function apiFetch<T>(path: string, init: { method?: 'POST' | 'PATCH
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `API ${path} responded ${res.status}`);
+    throw new ApiClientError(body?.error ?? `API ${path} responded ${res.status}`, res.status, body);
   }
   // Void endpoints (204 / empty body) resolve to undefined — res.json()
   // would throw a SyntaxError on the empty stream.

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { docStore, WorkflowError } from '../src/docstore';
 import { makeTestDb, resetOrgDb, testEnv } from './pglite';
-import { docsDocs, docsUsers } from './helpers';
+import { docsDocs, docsUsers, docsScoped } from './helpers';
 import type { CrudDb } from '../src/crud';
 import type { ApiEnv } from '../src/env';
 
@@ -393,5 +393,152 @@ describe('docStore routes', () => {
       headers: { 'content-type': 'application/json' },
     }, testEnv());
     expect(bogus.status).toBe(400);
+  });
+});
+
+describe('docStore idField', () => {
+  it('keys a collection by a non-id doc field end to end', async () => {
+    const store = docStore({
+      collections: [{ key: 'glossaries', table: docsDocs, idField: 'code' }],
+      db: () => db,
+    });
+    await store.putDoc(db, 'glossaries', { code: 'en-tr', term: 'kite' });
+    expect(await store.listDocs(db, 'glossaries')).toEqual([{ code: 'en-tr', term: 'kite' }]);
+    expect(await store.getDoc(db, 'glossaries', 'en-tr')).toMatchObject({ term: 'kite' });
+    const merged = await store.patchDoc(db, 'glossaries', 'en-tr', { term: 'wing' });
+    expect(merged).toMatchObject({ code: 'en-tr', term: 'wing' });
+    expect(await store.softDeleteDoc(db, 'glossaries', 'en-tr')).toBe(true);
+  });
+
+  it('rejects docs missing the key field', async () => {
+    const store = docStore({ collections: [{ key: 'g', table: docsDocs, idField: 'code' }], db: () => db });
+    await expect(store.putDoc(db, 'g', { term: 'x' })).rejects.toBeInstanceOf(WorkflowError);
+  });
+
+  it('routes PUT by the key field with the same envelope contract', async () => {
+    const store = docStore({ collections: [{ key: 'g', table: docsDocs, idField: 'code' }], db: () => db });
+    const hono = new Hono<{ Bindings: ApiEnv }>();
+    hono.route('/data', store.router);
+    const put = await hono.request('/data/g/en-tr', {
+      method: 'PUT',
+      body: JSON.stringify({ code: 'en-tr', term: 'kite' }),
+      headers: { 'content-type': 'application/json' },
+    }, testEnv());
+    expect(put.status).toBe(201);
+    const missing = await hono.request('/data/g/en-tr', {
+      method: 'PUT',
+      body: JSON.stringify({ term: 'kite' }),
+      headers: { 'content-type': 'application/json' },
+    }, testEnv());
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({ error: 'Invalid document payload', details: { code: ['Required'] } });
+  });
+});
+
+describe('docStore scope (composite-key collections)', () => {
+  function scopedApp() {
+    const store = docStore({
+      collections: [{ key: 'docs', table: docsScoped, scope: { column: docsScoped.facilityId, field: 'facilityId' } }],
+      db: () => db,
+    });
+    const hono = new Hono<{ Bindings: ApiEnv }>();
+    hono.route('/data', store.router);
+    return { hono, store };
+  }
+
+  it('stores the same id under different facilities and reads them apart', async () => {
+    const { store } = scopedApp();
+    await store.putDoc(db, 'docs', { id: 'tank-1', facilityId: 'f1', title: 'North' });
+    await store.putDoc(db, 'docs', { id: 'tank-1', facilityId: 'f2', title: 'South' });
+    expect(await store.listDocs(db, 'docs', 'f1')).toEqual([{ id: 'tank-1', facilityId: 'f1', title: 'North' }]);
+    expect(await store.listDocs(db, 'docs', 'f2')).toEqual([{ id: 'tank-1', facilityId: 'f2', title: 'South' }]);
+    expect(await store.listDocs(db, 'docs')).toHaveLength(2);
+    expect((await store.getDoc(db, 'docs', 'tank-1', 'f1'))!.title).toBe('North');
+    await expect(store.getDoc(db, 'docs', 'tank-1')).rejects.toBeInstanceOf(WorkflowError);
+  });
+
+  it('patches and deletes within one facility only', async () => {
+    const { store } = scopedApp();
+    await store.putDoc(db, 'docs', { id: 'tank-1', facilityId: 'f1', title: 'North' });
+    await store.putDoc(db, 'docs', { id: 'tank-1', facilityId: 'f2', title: 'South' });
+    const merged = await store.patchDoc(db, 'docs', 'tank-1', { title: 'North 2' }, 'f1');
+    expect(merged).toMatchObject({ facilityId: 'f1', title: 'North 2' });
+    expect((await store.getDoc(db, 'docs', 'tank-1', 'f2'))!.title).toBe('South');
+    expect(await store.softDeleteDoc(db, 'docs', 'tank-1', 'f1')).toBe(true);
+    expect(await store.listDocs(db, 'docs', 'f1')).toEqual([]);
+    expect(await store.listDocs(db, 'docs', 'f2')).toHaveLength(1);
+    await expect(store.patchDoc(db, 'docs', 'tank-1', { title: 'X' })).rejects.toBeInstanceOf(WorkflowError);
+  });
+
+  it('revives a soft-deleted doc inside its own facility', async () => {
+    const { store } = scopedApp();
+    await store.putDoc(db, 'docs', { id: 'tank-1', facilityId: 'f1', title: 'A' });
+    await store.softDeleteDoc(db, 'docs', 'tank-1', 'f1');
+    await store.putDoc(db, 'docs', { id: 'tank-1', facilityId: 'f1', title: 'B' });
+    expect(await store.listDocs(db, 'docs', 'f1')).toEqual([{ id: 'tank-1', facilityId: 'f1', title: 'B' }]);
+  });
+
+  it('routes require and honor the scope query', async () => {
+    const { hono } = scopedApp();
+    const put = await hono.request('/data/docs/tank-1?scope=f1', {
+      method: 'PUT',
+      body: JSON.stringify({ id: 'tank-1', facilityId: 'f1', title: 'North' }),
+      headers: { 'content-type': 'application/json' },
+    }, testEnv());
+    expect(put.status).toBe(201);
+    const patch = await hono.request('/data/docs/tank-1?scope=f1', {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'North 2' }),
+      headers: { 'content-type': 'application/json' },
+    }, testEnv());
+    expect(patch.status).toBe(200);
+    expect(await patch.json()).toMatchObject({ title: 'North 2' });
+    const noscope = await hono.request('/data/docs/tank-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'X' }),
+      headers: { 'content-type': 'application/json' },
+    }, testEnv());
+    expect(noscope.status).toBe(400);
+    const list = await hono.request('/data/docs?scope=f1', undefined, testEnv());
+    expect(await list.json()).toMatchObject([{ id: 'tank-1', facilityId: 'f1', title: 'North 2' }]);
+    const gone = await hono.request('/data/docs/tank-1?scope=f1', { method: 'DELETE' }, testEnv());
+    expect(gone.status).toBe(200);
+    expect((await hono.request('/data/docs?scope=f1', undefined, testEnv())).status).toBe(200);
+  });
+});
+
+describe('docStore afterWrite hook', () => {
+  it('runs after puts and deletes with the doc at hand', async () => {
+    const seen: Array<{ op: string; id: string; title: unknown }> = [];
+    const store = docStore({
+      collections: [
+        {
+          key: 'docs',
+          table: docsDocs,
+          afterWrite: ({ op, id, doc }) => {
+            seen.push({ op, id, title: doc.title });
+          },
+        },
+      ],
+      db: () => db,
+    });
+    await store.putDoc(db, 'docs', { id: 'a', title: 'A' });
+    await store.patchDoc(db, 'docs', 'a', { title: 'B' } as never);
+    await store.softDeleteDoc(db, 'docs', 'a');
+    expect(seen).toEqual([
+      { op: 'put', id: 'a', title: 'A' },
+      { op: 'put', id: 'a', title: 'B' },
+      { op: 'delete', id: 'a', title: 'B' },
+    ]);
+  });
+
+  it('never runs for putDocs seed loads', async () => {
+    let calls = 0;
+    const store = docStore({
+      collections: [{ key: 'docs', table: docsDocs, afterWrite: () => { calls += 1; } }],
+      db: () => db,
+    });
+    await store.putDocs(db, 'docs', [{ id: 'a' }, { id: 'b' }]);
+    expect(calls).toBe(0);
   });
 });

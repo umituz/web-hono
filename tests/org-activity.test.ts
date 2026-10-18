@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resolveOrg, orgHasMode, nextNumber } from '../src/org';
 import { writeAudit, writeNotification } from '../src/activity';
 import { makeTestDb, resetOrgDb } from './pglite';
-import { orgUsers, orgs, documents, activities, workdocs, trioAudit, trioNotes } from './helpers';
+import { orgUsers, orgs, documents, activities, workdocs, trioAudit, trioNotes, textNotes } from './helpers';
 import type { CrudDb } from '../src/crud';
 
 /* REAL-database coverage (in-memory Postgres) of the org-scoped helpers
@@ -209,5 +209,38 @@ describe('writeAudit / writeNotification', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].createdAt).toBeInstanceOf(Date);
     expect('read' in rows[0]).toBe(false);
+  });
+});
+
+describe('writeNotification dedupe, severity, and text stamps', () => {
+  it('skips the insert when the dedupe value already exists', async () => {
+    const first = await writeNotification(db, activities, { severity: 'info', title: 'T', body: 'B', entityId: 'ord-1' }, { dedupe: { column: activities.entityId, value: 'ord-1' } });
+    expect(first).toBe(true);
+    const second = await writeNotification(db, activities, { severity: 'info', title: 'T2', body: 'B2' }, { dedupe: { column: activities.entityId, value: 'ord-1' } });
+    expect(second).toBe(false);
+    const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe('T');
+  });
+
+  it('writes without a severity', async () => {
+    const ok = await writeNotification(db, activities, { title: 'T', body: 'B' });
+    expect(ok).toBe(true);
+    const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
+    expect(rows[0].severity).toBeNull();
+  });
+
+  it('stamps the ISO string on a text at column', async () => {
+    await writeNotification(db, textNotes, { title: 'T', body: 'B' });
+    const rows = (await db.select().from(textNotes)) as unknown as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(typeof rows[0].at).toBe('string');
+    expect(rows[0].at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('honors the string prefix argument alongside opts objects', async () => {
+    await writeNotification(db, activities, { severity: 'info', title: 'T', body: 'B' }, 'note');
+    const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
+    expect(rows[0].id).toMatch(/^note_/);
   });
 });

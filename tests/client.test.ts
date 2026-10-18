@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiFetch, apiWrite } from '../src/client';
+import { ApiClientError, apiFetch, apiWrite } from '../src/client';
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -57,5 +57,44 @@ describe('apiWrite', () => {
     const refresh = vi.fn(async () => {});
     await apiWrite('/api/x', { method: 'DELETE' }, [], refresh);
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('ApiClientError', () => {
+  it('carries status, message, and the conflicts array from a 409 body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(409, { error: 'Open sub-orders', conflicts: ['SO-1', 'SO-2'] })));
+    const err = await apiFetch('/api/x').then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ApiClientError);
+    const ace = err as ApiClientError;
+    expect(ace.status).toBe(409);
+    expect(ace.message).toBe('Open sub-orders');
+    expect(ace.conflicts).toEqual(['SO-1', 'SO-2']);
+    expect(ace.details).toBeUndefined();
+  });
+
+  it('exposes fieldErrors details from a validation 400', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(400, { error: 'Invalid payload', details: { qty: ['expected number'] } })));
+    const err = await apiFetch('/api/x').then(
+      () => null,
+      (e: unknown) => e,
+    );
+    const ace = err as ApiClientError;
+    expect(ace.status).toBe(400);
+    expect(ace.details).toEqual({ qty: ['expected number'] });
+  });
+
+  it('falls back to a null body on non-JSON failures', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })));
+    const err = await apiFetch('/api/x').then(
+      () => null,
+      (e: unknown) => e,
+    );
+    const ace = err as ApiClientError;
+    expect(ace).toBeInstanceOf(ApiClientError);
+    expect(ace.status).toBe(500);
+    expect(ace.body).toBeNull();
   });
 });

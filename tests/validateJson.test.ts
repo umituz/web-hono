@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { validateJson } from '../src/validator';
-import { actorFields, dateOnly, datetimeLocal, datetimeSeconds, hexColor, hhmm } from '../src/validator';
+import { actorFields, dateOnly, dateOnlyCoerce, datetimeLocal, datetimeSeconds, hexColor, hhmm } from '../src/validator';
 
 const WidgetSchema = z.object({ name: z.string().trim().min(2), count: z.number().int().min(0) }).strict();
 
@@ -139,5 +139,22 @@ describe('actorFields', () => {
     });
     expect(Schema.safeParse({ note: 'hi', actorName: 7 }).success).toBe(false);
     expect(Schema.safeParse({ note: 'hi', extra: 1 }).success).toBe(false); // still strict
+  });
+});
+
+describe('dateOnlyCoerce', () => {
+  it('passes a pure date through unchanged', () => {
+    expect(dateOnlyCoerce.parse('2026-10-19')).toBe('2026-10-19');
+  });
+
+  it('slices a full ISO datetime down to its date', () => {
+    expect(dateOnlyCoerce.parse('2026-10-19T09:30:00Z')).toBe('2026-10-19');
+    expect(dateOnlyCoerce.parse('2026-12-31T23:59')).toBe('2026-12-31');
+  });
+
+  it('rejects too-short and non-date remainders', () => {
+    for (const bad of ['2026-1-9', 'short', '19-10-2026T00:00:00Z']) {
+      expect(dateOnlyCoerce.safeParse(bad).success).toBe(false);
+    }
   });
 });
