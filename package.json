@@ -11,6 +11,7 @@
     "./types": "./src/types.ts",
     "./validator": "./src/validator.ts",
     "./client": "./src/client.ts",
+    "./dates": "./src/dates.ts",
     "./store": "./src/store.ts",
     "./store/react": "./src/store-react.ts",
     "./lifecycle": "./src/lifecycle.ts",

@@ -174,10 +174,11 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 
 | Entry point | Exports |
 |---|---|
-| `@umituz/web-hono` | `createApi`, `ApiConfig`, `healthRouter`, `ApiError`, `apiOnError`, `crudRoutes`, `listRoutes`, `CrudSpec`/`CrudTable`/`CreateSpec`/`ListSpec`/`CrudDb`, `getDb`, `uid`, `pickPatch`, `stampUpdate`, `trio`, `apiNotFound`, `spaFallback`, `ApiEnv` |
+| `@umituz/web-hono` | `createApi`, `ApiConfig`, `healthRouter`, `ApiError`, `apiOnError`, `crudRoutes`, `listRoutes`, `CrudSpec`/`CrudTable`/`CreateSpec`/`ListSpec`/`CrudDb`, `getDb`, `uid`, `pickPatch`, `stampUpdate`, `trio`, `apiNotFound`, `spaFallback`, `ApiEnv`, `isoNow`, `isoAt`, `todayISO`, `addDaysISO`, `IsoPrecision` |
 | `@umituz/web-hono/types` | `Row<T>`, `NewRow<T>`, `Serialized<T>`, `ClientRow<T>` — type-only |
 | `@umituz/web-hono/validator` | `validateJson(schema, message?)` |
 | `@umituz/web-hono/client` | `apiFetch<T>`, `apiWrite<T>` (void/204-tolerant) |
+| `@umituz/web-hono/dates` | `isoNow(precision?)`, `isoAt(d, precision?)`, `todayISO()`, `addDaysISO(iso, days)`, `IsoPrecision` — UTC, client-safe (no server imports) |
 | `@umituz/web-hono/store` | `createStore`, `StoreConfig`, `REFETCH_ALL` (+ `read`/`view`/`http`/`subscribeAll`/`snapshot`/`immutable` on the store) |
 | `@umituz/web-hono/store/react` | `makeStoreHooks(store)` → `useQuery`, `useDbValue`, `useCollection`, `useHydration`, `QueryResult` |
 | `@umituz/web-hono/lifecycle` | `resetTables`, `snapshotToSeed`, `seedFromSnapshot`, `TableSpec`, `SeedSnapshot` |
