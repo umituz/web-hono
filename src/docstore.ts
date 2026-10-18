@@ -163,7 +163,7 @@ export function docStore(spec: DocStoreSpec) {
     return count;
   }
 
-  async function patchDoc(db: CrudDb, key: string, id: string, patch: Doc): Promise<Doc | undefined> {
+  async function patchDoc(db: CrudDb, key: string, id: string, patch: Record<string, unknown>): Promise<Doc | undefined> {
     requireSpec(key);
     const col = byKey.get(key)!;
     const [row] = await db
