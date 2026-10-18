@@ -19,6 +19,7 @@ function makeStore() {
   return docStore({
     collections: [
       { key: 'docs', table: docsDocs, transitions: FLOW },
+      { key: 'tanks', table: docsDocs, transitions: FLOW, statusKey: 'state' },
       {
         key: 'settings',
         table: docsDocs,
@@ -86,6 +87,15 @@ describe('docStore motor', () => {
     const merged = await store.patchDoc(db, 'docs', 'fresh', { title: 'N' } as never);
     expect(merged).toMatchObject({ id: 'fresh', title: 'N' });
     expect(await store.getDoc(db, 'docs', 'fresh')).toMatchObject({ title: 'N' });
+  });
+
+  it('guards transitions through a custom statusKey field', async () => {
+    const { store } = app();
+    await store.putDoc(db, 'tanks', { id: 't1', state: 'draft' });
+    await store.putDoc(db, 'tanks', { id: 't1', state: 'draft' });
+    await store.putDoc(db, 'tanks', { id: 't1', state: 'review' });
+    await expect(store.putDoc(db, 'tanks', { id: 't1', state: 'draft' })).rejects.toBeInstanceOf(WorkflowError);
+    expect((await store.getDoc(db, 'tanks', 't1'))!.state).toBe('review');
   });
 
   it('guards the singleton id', async () => {

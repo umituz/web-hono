@@ -40,6 +40,8 @@ export interface DocCollectionSpec {
   singletonId?: string;
   /** Status state machine: allowed targets per current status. */
   transitions?: Record<string, string[]>;
+  /** Doc field the transitions guard reads. Default 'status' (fuelora: state, franchisia: stage). */
+  statusKey?: string;
 }
 
 export interface DocStoreSpec {
@@ -101,14 +103,15 @@ export function docStore(spec: DocStoreSpec) {
     }
     const guard = col.transitions;
     if (guard) {
+      const statusKey = col.statusKey ?? 'status';
       const [existing] = await db
         .select({ data: col.table.data })
         .from(col.table)
         .where(and(eq(col.table.id, String(doc.id)), isNull(col.table.deletedAt)))
         .limit(1);
       if (existing) {
-        const from = (existing.data as Doc).status;
-        const to = doc.status;
+        const from = (existing.data as Doc)[statusKey];
+        const to = doc[statusKey];
         if (typeof from === 'string' && typeof to === 'string' && !canTransition(guard, from, to)) {
           throw new WorkflowError(`Invalid ${key} transition ${from} → ${to}`);
         }
