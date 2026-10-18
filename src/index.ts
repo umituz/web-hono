@@ -6,7 +6,8 @@
  * and business rules — this package owns the cross-cutting skeleton:
  * the createApi app factory, the error envelope layer, the full-CRUD
  * resource factory, getDb, the uid/pickPatch/stampUpdate/trio/actor
- * helpers, the org-scoped lookups (resolveOrg/orgHasMode/nextNumber),
+ * helpers, the ISO date-string primitives (isoNow/todayISO/addDaysISO),
+ * the org-scoped lookups (resolveOrg/orgHasMode/nextNumber),
  * the audit and notification writes, findRow/softDelete, the JSON-404
  * and SPA-fallback handlers, and the ApiEnv binding types.
  *
@@ -29,6 +30,8 @@ export { docStore, canTransition, epoch, WorkflowError, UnknownCollectionError }
 export type { Doc, DocTable, DocCollectionSpec, DocStoreSpec, DocValidateFn } from './docstore';
 export { getDb } from './db';
 export { uid, pickPatch, patchTypeErrors, normalizeRow, stampUpdate, trio, actor } from './lib';
+export { isoNow, todayISO, addDaysISO } from './dates';
+export type { IsoPrecision } from './dates';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';
 export { writeAudit, writeNotification } from './activity';
