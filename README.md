@@ -153,7 +153,7 @@ const { status, error, retry } = useHydration();
 const orders = useCollection('orders'); // typed, re-renders on its channel
 ```
 
-The machine: first read hydrates every collection in parallel (deduped, retried on failure); repositories read synchronously via `getDb()` or `store.read(fn)`; writes go through `store.apiWrite(path, init, keys)` / `store.http.write` which refresh only the touched collections on success and leave the cache untouched on failure; per-collection pub/sub (plus the `__refetch_all__` wildcard) drives the hooks; `view(keys, selector)` gives change-detected derived reads.
+The machine: first read hydrates every collection through `GET /api/bootstrap` in small sequential batches (default 12 paths per request — the server replays its own list routes in-process and answers one bundle; collections emit progressively as their batch lands, so the database wakes once instead of once per collection; APIs predating the route answer 404 and hydration falls back to the 1.x parallel fan-out; `bootstrap: false` pins the legacy mode); repositories read synchronously via `getDb()` or `store.read(fn)`; writes go through `store.apiWrite(path, init, keys)` / `store.http.write` which refresh only the touched collections on success and leave the cache untouched on failure; per-collection pub/sub (plus the `__refetch_all__` wildcard) drives the hooks; `view(keys, selector)` gives change-detected derived reads.
 
 **7. Lifecycle scripts** (`scripts/`) — keep only your `TABLE_SPECS` registry and thin wrappers:
 

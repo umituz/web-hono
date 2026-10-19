@@ -121,4 +121,40 @@ describe('createApi', () => {
     expect(await res.json()).toEqual({ error: 'Internal server error' });
     expect(logged).toHaveBeenCalledOnce();
   });
+
+  it('bundles replayed /api list routes under GET /api/bootstrap', async () => {
+    const { app } = makeApp();
+    const res = await app.request('/api/bootstrap?paths=/api/things,/api/things', undefined, env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      results: { '/api/things': { status: 200, body: [{ id: 't_1' }] } },
+    });
+  });
+
+  it('ignores non-/api paths, duplicates and its own route in the bootstrap list', async () => {
+    const { app } = makeApp();
+    const res = await app.request(`/api/bootstrap?paths=${encodeURIComponent('https://evil.example')},/api/bootstrap,,/api/health`, undefined, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { results: Record<string, unknown> };
+    expect(Object.keys(body.results)).toEqual(['/api/health']);
+    expect(body.results['/api/health']).toMatchObject({ status: 200 });
+  });
+
+  it('reports a non-200 replay status without a body, keeping the error envelope shape', async () => {
+    const { app } = makeApp();
+    const res = await app.request('/api/bootstrap?paths=/api/things/gone,/api/nope', undefined, env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      results: {
+        '/api/things/gone': { status: 404 },
+        '/api/nope': { status: 404 },
+      },
+    });
+  });
+
+  it('runs middleware on the bootstrap request and on every replayed path', async () => {
+    const { app, seen } = makeApp();
+    await app.request('/api/bootstrap?paths=/api/things', undefined, env);
+    expect(seen).toEqual(['mw1', 'mw1']); // once for the bundle, once for the replay
+  });
 });

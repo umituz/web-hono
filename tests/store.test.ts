@@ -20,6 +20,7 @@ function makeStore() {
   return createStore<Db>({
     endpoints: { items: '/api/items', flag: '/api/flag' },
     empty: (): Db => ({ items: [], flag: { on: false } }),
+    bootstrap: false, // these pin the 1.x fan-out contract
   });
 }
 
@@ -251,5 +252,131 @@ describe('store 1.3 additions', () => {
     await store.http.write('/api/items', { method: 'POST', json: { id: 'new' } }, ['items']);
     expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(2); // refreshed
     expect(store.getDb().items).toEqual([{ id: 'new' }]); // …and the cache caught up
+  });
+});
+
+describe('bootstrap hydration (default mode)', () => {
+  /** Fetch stub for the bundled loader: /api/bootstrap answers from
+   *  `serve(paths)` (a results map, or a Response for failures); any other
+   *  path answers from `direct` like the shared stub. Calls are logged by
+   *  METHOD + pathname (query dropped) for count assertions. */
+  function stubNet(
+    serve: (paths: string[]) => Record<string, { status: number; body?: unknown }> | Response,
+    direct: Record<string, () => unknown> = {},
+  ) {
+    const calls: string[] = [];
+    const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://store.test');
+      const key = `${init?.method ?? 'GET'} ${url.pathname}`;
+      calls.push(key);
+      if (url.pathname === '/api/bootstrap') {
+        const paths = (url.searchParams.get('paths') ?? '').split(',').filter(Boolean).map(decodeURIComponent);
+        const out = serve(paths);
+        if (out instanceof Response) return out;
+        return new Response(JSON.stringify({ results: out }), { headers: { 'content-type': 'application/json' } });
+      }
+      const payload = direct[key]?.();
+      if (payload instanceof Response) return payload;
+      return new Response(JSON.stringify(payload ?? null), { headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fn);
+    return { calls };
+  }
+
+  const ok = (body: unknown) => ({ status: 200, body });
+
+  it('hydrates every collection from one bundle — no per-collection fan-out', async () => {
+    const { calls } = stubNet((paths) => Object.fromEntries(paths.map((p) => [p, p === '/api/items' ? ok([{ id: 'a' }]) : ok({ on: true })])));
+    const store = createStore<Db>({ endpoints: { items: '/api/items', flag: '/api/flag' }, empty: (): Db => ({ items: [], flag: { on: false } }) });
+    const seen: string[] = [];
+    store.subscribe(['items'], () => seen.push('items'));
+    store.subscribe(['flag'], () => seen.push('flag'));
+    const onAll = vi.fn();
+    store.subscribeAll(onAll);
+    await store.ensureHydrated();
+    expect(store.getDb().items).toEqual([{ id: 'a' }]);
+    expect(store.getDb().flag).toEqual({ on: true }); // singleton row installed as-is
+    expect(calls.filter((c) => c === 'GET /api/bootstrap')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(0); // never fanned out
+    expect(calls.filter((c) => c === 'GET /api/flag')).toHaveLength(0);
+    expect(seen).toContain('items'); // progressive per-collection emits
+    expect(seen).toContain('flag');
+    expect(onAll).toHaveBeenCalled(); // wildcard fires once hydration settles
+  });
+
+  it('loads in sequential batches of the configured chunk size', async () => {
+    const served: string[][] = [];
+    const { calls } = stubNet((paths) => {
+      served.push(paths);
+      return Object.fromEntries(paths.map((p) => [p, ok(p === '/api/items' ? [] : { on: false })]));
+    });
+    const store = createStore<Db>({
+      endpoints: { items: '/api/items', flag: '/api/flag' },
+      empty: (): Db => ({ items: [], flag: { on: false } }),
+      bootstrap: { chunk: 1 },
+    });
+    await store.ensureHydrated();
+    expect(calls.filter((c) => c === 'GET /api/bootstrap')).toHaveLength(2);
+    expect(served).toEqual([['/api/items'], ['/api/flag']]); // one path per batch
+  });
+
+  it('falls back to the per-collection fan-out when the API predates the route (404)', async () => {
+    const { calls } = stubNet(() => new Response(JSON.stringify({ error: 'Not found' }), { status: 404 }), {
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': () => ({ on: true }),
+    });
+    const store = createStore<Db>({ endpoints: { items: '/api/items', flag: '/api/flag' }, empty: (): Db => ({ items: [], flag: { on: false } }) });
+    await store.ensureHydrated();
+    expect(store.getDb().items).toEqual([{ id: 'a' }]);
+    expect(store.getDb().flag).toEqual({ on: true });
+    expect(calls.filter((c) => c === 'GET /api/bootstrap')).toHaveLength(1); // probed once, then legacy
+    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'GET /api/flag')).toHaveLength(1);
+  });
+
+  it('falls back per key for paths the bundle could not serve, keeping successful ones bundled', async () => {
+    const { calls } = stubNet(
+      (paths) => Object.fromEntries(paths.map((p) => [p, p === '/api/flag' ? { status: 500 } : ok([{ id: 'a' }])])),
+      { 'GET /api/flag': () => ({ on: true }) },
+    );
+    const store = createStore<Db>({ endpoints: { items: '/api/items', flag: '/api/flag' }, empty: (): Db => ({ items: [], flag: { on: false } }) });
+    await store.ensureHydrated();
+    expect(store.getDb().items).toEqual([{ id: 'a' }]);
+    expect(store.getDb().flag).toEqual({ on: true });
+    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(0); // served by the bundle
+    expect(calls.filter((c) => c === 'GET /api/flag')).toHaveLength(1); // rescued per-collection
+  });
+
+  it('collapses duplicate endpoint URLs into one bundled path', async () => {
+    interface Db2 {
+      items: Row[];
+      more: Row[];
+    }
+    const served: string[][] = [];
+    stubNet((paths) => {
+      served.push(paths);
+      return Object.fromEntries(paths.map((p) => [p, ok([{ id: 'shared' }])]));
+    });
+    const store = createStore<Db2>({
+      endpoints: { items: '/api/items', more: '/api/items' },
+      empty: (): Db2 => ({ items: [], more: [] }),
+    });
+    await store.ensureHydrated();
+    expect(served).toEqual([['/api/items']]); // one path requested once
+    expect(store.getDb().items).toEqual([{ id: 'shared' }]);
+    expect(store.getDb().more).toEqual([{ id: 'shared' }]); // both keys fed from the bundle
+  });
+
+  it('propagates a rescuing collection failure — a failed hydration retries whole', async () => {
+    let failing = true;
+    stubNet(
+      (paths) => Object.fromEntries(paths.map((p) => [p, p === '/api/flag' ? { status: 500 } : ok([{ id: 'a' }])])),
+      { 'GET /api/flag': () => (failing ? new Response('boom', { status: 500 }) : { on: true }) },
+    );
+    const store = createStore<Db>({ endpoints: { items: '/api/items', flag: '/api/flag' }, empty: (): Db => ({ items: [], flag: { on: false } }) });
+    await expect(store.ensureHydrated()).rejects.toThrow('responded 500');
+    failing = false;
+    await store.ensureHydrated();
+    expect(store.getDb().flag).toEqual({ on: true });
   });
 });
