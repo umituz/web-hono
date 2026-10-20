@@ -83,9 +83,13 @@ export function canTransition(map: Record<string, string[]>, from: string, to: s
   return from === to || (map[from] ?? []).includes(to);
 }
 
-/** ISO string → epoch ms; anything unparsable falls back to now. */
+/** ISO string → epoch ms; anything unparsable falls back to now. The
+ *  epoch-0 instant (1970-01-01T00:00:00Z) parses to 0 and must stay 0 —
+ *  a truthiness check would silently rewrite it to "now". */
 export function epoch(iso: unknown): number {
-  return typeof iso === 'string' && Date.parse(iso) ? Date.parse(iso) : Date.now();
+  if (typeof iso !== 'string') return Date.now();
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? Date.now() : ms;
 }
 
 function defaultDb(c: RequestContext): CrudDb {
@@ -145,12 +149,14 @@ export function docStore(spec: DocStoreSpec) {
     return and(...conds);
   }
 
-  function rowValues(col: DocCollectionSpec, doc: DocInput, nowMs: number): Record<string, unknown> {
+  function rowValues(col: DocCollectionSpec, doc: DocInput): Record<string, unknown> {
     const id = docIdOf(col, doc);
     const values: Record<string, unknown> = {
       id,
-      createdAt: epoch(doc.createdAt) || nowMs,
-      updatedAt: epoch(doc.updatedAt) || nowMs,
+      // epoch() already falls back to now for unparsable input; the extra
+      // `|| now` would rewrite a legitimate 0 (epoch-0 instant) to now.
+      createdAt: epoch(doc.createdAt),
+      updatedAt: epoch(doc.updatedAt),
       deletedAt: null as number | null,
       data: doc,
       ...col.columns?.(doc),
@@ -185,7 +191,7 @@ export function docStore(spec: DocStoreSpec) {
       }
       await col.validate?.({ db, doc, existing });
     }
-    const values = rowValues(col, doc, Date.now());
+    const values = rowValues(col, doc);
     await db
       .insert(col.table)
       .values(values as never)
@@ -203,7 +209,7 @@ export function docStore(spec: DocStoreSpec) {
     const col = requireSpec(key);
     let count = 0;
     for (let i = 0; i < docs.length; i += chunkSize) {
-      const chunk = docs.slice(i, i + chunkSize).map((doc) => rowValues(col, doc, Date.now()));
+      const chunk = docs.slice(i, i + chunkSize).map((doc) => rowValues(col, doc));
       await db
         .insert(col.table)
         .values(chunk as never)

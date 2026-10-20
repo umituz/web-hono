@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { docStore, WorkflowError } from '../src/docstore';
+import { docStore, epoch, WorkflowError } from '../src/docstore';
 import { makeTestDb, resetOrgDb, testEnv } from './pglite';
 import { docsDocs, docsUsers, docsScoped } from './helpers';
 import type { CrudDb } from '../src/crud';
@@ -48,6 +48,13 @@ beforeEach(async () => {
 });
 
 describe('docStore motor', () => {
+  it('epoch keeps the epoch-0 instant instead of rewriting it to now', () => {
+    expect(epoch('1970-01-01T00:00:00.000Z')).toBe(0);
+    expect(epoch('2024-06-01T00:00:00.000Z')).toBe(Date.parse('2024-06-01T00:00:00.000Z'));
+    expect(epoch('not a date')).toBeGreaterThan(Date.now() - 60_000);
+    expect(epoch(42)).toBeGreaterThan(Date.now() - 60_000);
+  });
+
   it('puts a doc, lists it verbatim, and gets it by id', async () => {
     const { store } = app();
     await store.putDoc(db, 'docs', { id: 'd1', title: 'Spec', status: 'draft' });
