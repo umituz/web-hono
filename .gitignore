@@ -1,9 +1,50 @@
+# bağımlılıklar
 node_modules/
+
+# kilit — npm install yeniden üretir, ASLA gite gitmez
+package-lock.json
+
+# build çıktıları
 dist/
-*.tgz
+dist-ssr/
+dist-smoke/
+build/
+.vite/
+*.tsbuildinfo
+*.local
+
+# drizzle-kit lokal çıktısı (göçler db:push ile uygulanır)
+drizzle/
+
+# ortam / gizli — yalnız *.example takipte kalır
 .env
 .env.*
 !.env.example
+!.env.*.example
+.dev.vars
+
+# cloudflare lokal durum
+.wrangler/
+
+# test kapsam + tarayıcı/canary çıktıları
+coverage/
+shots/
+
+# loglar
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# editör / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
 .DS_Store
+Thumbs.db
+
+# cache
+.cache/
 .eslintcache
-*.tsbuildinfo
