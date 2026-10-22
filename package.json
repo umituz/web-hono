@@ -1,7 +1,7 @@
 {
   "name": "@umituz/web-hono",
   "version": "1.10.1",
-  "description": "API backend platform for Cloudflare Workers + Neon Postgres: createApi skeleton + error envelope layer, full-CRUD resource factory (opt-in create/remove, list params), schema→client type bridge (ClientRow), apiFetch/apiWrite client, reactive fetch-backed store (+React hooks), and db lifecycle scripts (reset / snapshot / seed)",
+  "description": "API backend platform for Cloudflare Workers + Neon Postgres: createApi skeleton + error envelope layer, full-CRUD resource factory (opt-in create/remove, list params), schema→client type bridge (ClientRow), apiFetch/apiWrite client, reactive fetch-backed store (+React hooks), better-auth server integration (tables/getter/mount/session helpers), and db lifecycle scripts (reset / snapshot / seed)",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,6 +15,7 @@
     "./store": "./src/store.ts",
     "./store/react": "./src/store-react.ts",
     "./lifecycle": "./src/lifecycle.ts",
+    "./auth": "./src/auth.ts",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -61,12 +62,16 @@
   },
   "peerDependencies": {
     "@neondatabase/serverless": "^1.0.0",
+    "better-auth": "^1.7.0",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
+    "better-auth": {
+      "optional": true
+    },
     "react": {
       "optional": true
     }
@@ -75,14 +80,17 @@
     "@electric-sql/pglite": "^0.5.9",
     "@eslint/js": "^9.32.0",
     "@neondatabase/serverless": "^1.2.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/react": "^16.3.3",
     "@types/node": "~22.13.10",
     "@types/react": "^19.1.0",
+    "better-auth": "^1.7.12",
     "drizzle-orm": "^0.45.4",
     "eslint": "^9.32.0",
     "hono": "^4.13.13",
     "jsdom": "^29.1.1",
     "react": "^19.1.0",
+    "react-dom": "19.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.58.0",
     "vitest": "3.2.4",

@@ -182,6 +182,7 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 | `@umituz/web-hono/store` | `createStore`, `StoreConfig`, `REFETCH_ALL` (+ `read`/`view`/`http`/`subscribeAll`/`snapshot`/`immutable` on the store) |
 | `@umituz/web-hono/store/react` | `makeStoreHooks(store)` → `useQuery`, `useDbValue`, `useCollection`, `useHydration`, `QueryResult` |
 | `@umituz/web-hono/lifecycle` | `resetTables`, `snapshotToSeed`, `seedFromSnapshot`, `TableSpec`, `SeedSnapshot` |
+| `@umituz/web-hono/auth` | `authTables(prefix)`, `AuthTables`, `AuthEnv`, `createAuthGetter`, `AuthOptions`/`AuthInstance`, `mountAuth`, `createSessionHelpers` (`currentUser`/`scopeOf`), `SessionUserInfo` — better-auth (optional peer) over the shared Neon DB |
 
 ## Migration notes (per feature, all optional)
 
