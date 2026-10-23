@@ -110,7 +110,11 @@ function initAuth(env: AuthEnv, opts: AuthOptions<AuthEnv>) {
       enabled: true,
       sendResetPassword: async (data) => {
         const send =
-          opts.sendResetPassword ?? (({ user, url }) => console.log(`[password-reset] ${user.email} ${url}`));
+          opts.sendResetPassword ??
+          (({ user, url, token }) => {
+            const link = `${new URL(url).origin}/reset-password?token=${token}`;
+            console.log(`[password-reset] ${user.email} ${link}`);
+          });
         await send({ user: data.user, url: data.url, token: data.token });
       },
       onPasswordReset: async ({ user }) => {
