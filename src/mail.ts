@@ -1,5 +1,5 @@
 export interface MailEnv {
-  RESEND_API_KEY: string;
+  RESEND_API_KEY?: string;
 }
 
 export interface SendEmailInput {
