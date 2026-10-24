@@ -90,7 +90,7 @@ export interface AuthOptions<E extends AuthEnv = AuthEnv> {
   db: (env: E) => DbLike;
   tables: AuthTables;
   trustedOrigins?: string[];
-  sendResetPassword?: (args: ResetPasswordArgs) => Promise<void> | void;
+  sendResetPassword?: (env: E, args: ResetPasswordArgs) => Promise<void> | void;
 }
 
 function initAuth(env: AuthEnv, opts: AuthOptions<AuthEnv>) {
@@ -111,11 +111,11 @@ function initAuth(env: AuthEnv, opts: AuthOptions<AuthEnv>) {
       sendResetPassword: async (data) => {
         const send =
           opts.sendResetPassword ??
-          (({ user, url, token }) => {
+          ((_env, { user, url, token }) => {
             const link = `${new URL(url).origin}/reset-password?token=${token}`;
             console.log(`[password-reset] ${user.email} ${link}`);
           });
-        await send({ user: data.user, url: data.url, token: data.token });
+        await send(env, { user: data.user, url: data.url, token: data.token });
       },
       onPasswordReset: async ({ user }) => {
         await opts.db(env).delete(opts.tables.session).where(eq(opts.tables.session.userId, user.id));

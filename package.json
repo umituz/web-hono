@@ -16,6 +16,7 @@
     "./store/react": "./src/store-react.ts",
     "./lifecycle": "./src/lifecycle.ts",
     "./auth": "./src/auth.ts",
+    "./mail": "./src/mail.ts",
     "./etag": "./src/etag.ts",
     "./package.json": "./package.json"
   },

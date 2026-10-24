@@ -40,3 +40,5 @@ export { findRow, softDelete } from './rows';
 export type { AliveTable } from './rows';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';
+export { sendEmail } from './mail';
+export type { MailEnv, SendEmailInput } from './mail';
