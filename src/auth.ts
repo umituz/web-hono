@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { bearer } from 'better-auth/plugins';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -123,6 +124,7 @@ function initAuth(env: AuthEnv, opts: AuthOptions<AuthEnv>) {
     },
     session: { expiresIn: SESSION_SECONDS, updateAge: UPDATE_AGE_SECONDS },
     trustedOrigins: opts.trustedOrigins ?? [],
+    plugins: [bearer()],
   });
 }
 
