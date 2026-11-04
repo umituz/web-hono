@@ -22,6 +22,7 @@
     "./http": "./src/http.ts",
     "./r2": "./src/r2.ts",
     "./resource": "./src/resource.ts",
+    "./resource/react": "./src/resource-react.ts",
     "./package.json": "./package.json"
   },
   "scripts": {
