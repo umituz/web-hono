@@ -139,3 +139,26 @@ export function normalizeRow(table: PgTable, input: Record<string, unknown>): Re
   }
   return out;
 }
+
+/** Run `fn` over items in `limit`-sized waves — bounded DB subrequest fan-out. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += limit) {
+    out.push(...(await Promise.all(items.slice(i, i + limit).map(fn))));
+  }
+  return out;
+}
+
+/** Retry transient Neon/HTTP blips: up to `attempts` tries, backoff 250ms·n. */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}

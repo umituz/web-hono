@@ -15,9 +15,12 @@ export default tseslint.config(
         console: "readonly",
         process: "readonly",
         Buffer: "readonly",
+        document: "readonly",
+        localStorage: "readonly",
       },
     },
     rules: {
+      "no-empty": ["error", { allowEmptyCatch: true }],
       // Error-level: underscore-prefixed identifiers are the established
       // convention for intentionally-unused params (interface conformance),
       // so they are exempted rather than suppressed per-line.

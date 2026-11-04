@@ -19,6 +19,10 @@
  *   `/store`      createStore — the fetch-backed reactive store
  *   `/store/react` makeStoreHooks — useQuery/useDbValue/useCollection/useHydration
  *   `/lifecycle`  reset / snapshot / seed — the shared-Neon db lifecycle
+ *   `/cookies`    createCookieChannel — one named browser cookie, read/write/clear
+ *   `/http`       requestScopeOf / respondWithEtag / internalError / CACHE_CONTROLS
+ *   `/r2`         streamFromBucket / parseRange — ranged R2 streaming
+ *   `/resource`   createResource — TTL-cached async value with subscribe
  */
 export { createApi } from './api';
 export type { ApiConfig } from './api';
@@ -29,7 +33,7 @@ export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec }
 export { docStore, canTransition, epoch, WorkflowError, UnknownCollectionError } from './docstore';
 export type { Doc, DocInput, DocTable, DocCollectionSpec, DocStoreSpec, DocValidateFn, DocAfterWriteFn, DocScopeSpec } from './docstore';
 export { getDb } from './db';
-export { uid, pickPatch, patchTypeErrors, normalizeRow, stampUpdate, trio, actor } from './lib';
+export { uid, pickPatch, patchTypeErrors, normalizeRow, stampUpdate, trio, actor, mapLimit, withRetry } from './lib';
 export { isoNow, isoAt, todayISO, addDaysISO } from './dates';
 export type { IsoPrecision } from './dates';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
