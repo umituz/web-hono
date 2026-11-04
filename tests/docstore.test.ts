@@ -282,7 +282,7 @@ describe('docStore routes', () => {
     expect(await list.json()).toEqual([{ id: 'a', title: 'A' }]);
     const ghost = await hono.request('/data/ghosts', undefined, testEnv());
     expect(ghost.status).toBe(404);
-    expect(await ghost.json()).toEqual({ error: 'Unknown collection', collection: 'ghosts' });
+    expect(await ghost.json()).toEqual({ error: "Unknown collection 'ghosts'" });
   });
 
   it('GET one doc and the Document-not-found 404', async () => {
@@ -547,5 +547,105 @@ describe('docStore afterWrite hook', () => {
     });
     await store.putDocs(db, 'docs', [{ id: 'a' }, { id: 'b' }]);
     expect(calls).toBe(0);
+  });
+});
+
+describe('docStore router config (session scope, allowlist, hooks, bulk batch)', () => {
+  const FLOW: Record<string, string[]> = { draft: ['review'], review: ['done'] };
+
+  function sessionApp(extra: { scope?: string | null; onPutCalls?: unknown[] } = {}) {
+    const putShapes: { key: string; existing: unknown }[] = [];
+    const store = docStore({
+      collections: [
+        { key: 'synced', table: docsScoped, scope: { column: docsScoped.facilityId, field: 'facilityId' }, transitions: FLOW },
+        { key: 'internal', table: docsDocs },
+      ],
+      db: () => db,
+      scopeOf: async () => extra.scope === undefined ? 'u1' : extra.scope,
+      routeKeys: ['synced'],
+      onPut: ({ key, doc, existing }) => {
+        putShapes.push({ key, existing });
+        doc.lockedBy = 'server';
+      },
+      onPatch: ({ patch }) => {
+        patch.touched = true;
+      },
+      bulkBatch: true,
+    });
+    const hono = new Hono<{ Bindings: ApiEnv }>();
+    hono.route('/data', store.router);
+    return { hono, store, putShapes };
+  }
+
+  const json = { 'content-type': 'application/json' };
+
+  it('answers 401 when scopeOf resolves null', async () => {
+    const { hono } = sessionApp({ scope: null });
+    const res = await hono.request('/data/synced', undefined, testEnv());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Authentication required' });
+  });
+
+  it('filters lists and stamps puts with the session scope', async () => {
+    const { hono, store } = sessionApp();
+    await store.putDoc(db, 'synced', { id: 'a', facilityId: 'someone-else', title: 'theirs' });
+    const put = await hono.request('/data/synced/a', { method: 'PUT', body: JSON.stringify({ id: 'a', title: 'mine' }), headers: json }, testEnv());
+    expect(put.status).toBe(201);
+    const doc = await put.json();
+    expect(doc.facilityId).toBe('u1');
+    const list = await hono.request('/data/synced', undefined, testEnv());
+    expect(await list.json()).toEqual([{ id: 'a', title: 'mine', facilityId: 'u1', lockedBy: 'server' }]);
+  });
+
+  it('runs onPut with existing (200 on rewrite, 201 on create) and onPatch shaping', async () => {
+    const { hono, putShapes } = sessionApp();
+    const first = await hono.request('/data/synced/a', { method: 'PUT', body: JSON.stringify({ id: 'a', title: 'A' }), headers: json }, testEnv());
+    expect(first.status).toBe(201);
+    const second = await hono.request('/data/synced/a', { method: 'PUT', body: JSON.stringify({ id: 'a', title: 'B' }), headers: json }, testEnv());
+    expect(second.status).toBe(200);
+    expect(putShapes.map((s) => s.existing === null)).toEqual([true, false]);
+    const patched = await hono.request('/data/synced/a', { method: 'PATCH', body: JSON.stringify({ title: 'C' }), headers: json }, testEnv());
+    expect(await patched.json()).toMatchObject({ title: 'C', touched: true });
+  });
+
+  it('hides collections outside routeKeys behind the unknown-collection 404', async () => {
+    const { hono, store } = sessionApp();
+    const blocked = await hono.request('/data/internal', undefined, testEnv());
+    expect(blocked.status).toBe(404);
+    expect(await blocked.json()).toEqual({ error: "Unknown collection 'internal'" });
+    await store.putDoc(db, 'internal', { id: 'x' });
+    expect(await store.listDocs(db, 'internal')).toEqual([{ id: 'x' }]);
+  });
+
+  it('bulk batch applies grouped puts/dels, stamps scope, and guards transitions', async () => {
+    const { hono } = sessionApp();
+    const ok = await hono.request('/data/batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        ops: [
+          { op: 'put', collection: 'synced', doc: { id: 'a', status: 'draft' } },
+          { op: 'put', collection: 'synced', doc: { id: 'b', status: 'draft' } },
+          { op: 'del', collection: 'synced', id: 'b' },
+        ],
+      }),
+      headers: json,
+    }, testEnv());
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ ok: true, applied: 3 });
+    const list = await hono.request('/data/synced', undefined, testEnv());
+    expect(await list.json()).toEqual([{ id: 'a', status: 'draft', facilityId: 'u1', lockedBy: 'server' }]);
+    const advance = await hono.request('/data/batch', {
+      method: 'POST',
+      body: JSON.stringify({ ops: [{ op: 'put', collection: 'synced', doc: { id: 'a', status: 'review' } }] }),
+      headers: json,
+    }, testEnv());
+    expect(advance.status).toBe(200);
+    const bad = await hono.request('/data/batch', {
+      method: 'POST',
+      body: JSON.stringify({ ops: [{ op: 'put', collection: 'synced', doc: { id: 'a', status: 'draft' } }] }),
+      headers: json,
+    }, testEnv());
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: 'Invalid synced transition review → draft' });
   });
 });

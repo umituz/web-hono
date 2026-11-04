@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
 import { validator } from 'hono/validator';
@@ -22,9 +22,15 @@ import type { ApiEnv } from './env';
  * listDocs/getDoc) that seed scripts and server-side workflows call
  * directly. Status machines ride along as declarative `transitions` maps and
  * write guards as `validate` hooks; violations surface as WorkflowError → 400.
+ *
+ * Router config scales it from open admin surfaces to authenticated user
+ * sync APIs: `scopeOf` derives the scope per request from the session (401
+ * when it resolves null, replacing the `?scope=` query), `routeKeys`
+ * allowlists which collections the router serves (others 404 as unknown,
+ * staying motor-only), `onPut`/`onPatch` shape writes (server-owned fields,
+ * deep merges), and `bulkBatch` runs the batch as grouped bulk writes that
+ * keep large syncs inside the Workers subrequest budget.
  */
-
-type RequestContext = Context<{ Bindings: ApiEnv }>;
 
 export type Doc = Record<string, unknown> & { id: string };
 export type DocInput = Record<string, unknown>;
@@ -57,7 +63,7 @@ export interface DocCollectionSpec {
   /** Collections that must always write the one fixed id. */
   singletonId?: string;
   /** Status state machine: allowed targets per current status. */
-  transitions?: Record<string, string[]>;
+  transitions?: Readonly<Record<string, readonly string[]>>;
   /** Doc field the transitions guard reads. Default 'status'. */
   statusKey?: string;
   /** Write guard — see DocValidateFn. */
@@ -67,19 +73,54 @@ export interface DocCollectionSpec {
   afterWrite?: DocAfterWriteFn;
 }
 
-export interface DocStoreSpec {
+export interface DocWriteHookArgs {
+  key: string;
+  /** Incoming document — hooks may rewrite server-owned fields in place. */
+  doc: Record<string, unknown>;
+  /** Current stored doc, or null when the write creates. */
+  existing: Record<string, unknown> | null;
+  /** Session scope when `scopeOf` resolved one (else undefined). */
+  scope: string | undefined;
+}
+
+export interface DocPatchHookArgs {
+  key: string;
+  /** Incoming patch — hooks may rewrite it in place. */
+  patch: Record<string, unknown>;
+  existing: Doc | null;
+  scope: string | undefined;
+}
+
+export interface DocStoreSpec<E extends ApiEnv = ApiEnv> {
   collections: readonly DocCollectionSpec[];
   /** Injectable db factory (tests, Hyperdrive). Default: per-request neon-http. */
-  db?: (c: RequestContext) => CrudDb;
+  db?: (c: Context<{ Bindings: E }>) => CrudDb;
   /** POST /batch op cap. Default 2000. */
   maxBatch?: number;
+  /** Restrict the generated ROUTER to these keys (authz allowlist — admin
+   *  collections stay motor-only). Others answer 404 as if unknown.
+   *  Default: every collection is routed. */
+  routeKeys?: readonly string[];
+  /** Session-derived scope for the router: resolves per request (better-auth
+   *  user id, tenant id…). Null answers 401. When set it replaces the
+   *  `?scope=` query: scoped collections are filtered by it and puts get it
+   *  stamped, so clients cannot read or write another scope's rows. */
+  scopeOf?: (c: Context<{ Bindings: E }>) => Promise<string | null>;
+  /** Router-level put shaping (server-owned fields) before the write. */
+  onPut?: (args: DocWriteHookArgs) => void | Promise<void>;
+  /** Router-level patch shaping (deep merges, server-owned fields). */
+  onPatch?: (args: DocPatchHookArgs) => void | Promise<void>;
+  /** Batch runs as grouped bulk writes — one guard read + chunked upserts
+   *  per collection instead of per-op putDoc — keeping large sync batches
+   *  inside the Workers subrequest budget. Default: per-op. */
+  bulkBatch?: boolean;
 }
 
 export class WorkflowError extends Error {}
 export class UnknownCollectionError extends Error {}
 
 /** Status machine check: staying put is always allowed. */
-export function canTransition(map: Record<string, string[]>, from: string, to: string): boolean {
+export function canTransition(map: Readonly<Record<string, readonly string[]>>, from: string, to: string): boolean {
   return from === to || (map[from] ?? []).includes(to);
 }
 
@@ -92,14 +133,15 @@ export function epoch(iso: unknown): number {
   return Number.isNaN(ms) ? Date.now() : ms;
 }
 
-function defaultDb(c: RequestContext): CrudDb {
+function defaultDb<E extends ApiEnv>(c: Context<{ Bindings: E }>): CrudDb {
   return drizzle(neon(c.env.DATABASE_URL));
 }
 
-export function docStore(spec: DocStoreSpec) {
+export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
   const byKey = new Map(spec.collections.map((col) => [col.key, col]));
-  const getDb = spec.db ?? defaultDb;
+  const getDb = spec.db ?? defaultDb<E>;
   const maxBatch = spec.maxBatch ?? 2000;
+  const routeSet = spec.routeKeys === undefined ? null : new Set(spec.routeKeys);
 
   function collectionOf(key: string): DocCollectionSpec | undefined {
     return byKey.get(key);
@@ -108,6 +150,14 @@ export function docStore(spec: DocStoreSpec) {
   function requireSpec(key: string): DocCollectionSpec {
     const col = byKey.get(key);
     if (!col) throw new UnknownCollectionError(`Unknown collection '${key}'`);
+    return col;
+  }
+
+  function requireRoute(key: string): DocCollectionSpec {
+    const col = requireSpec(key);
+    if (routeSet !== null && !routeSet.has(key)) {
+      throw new UnknownCollectionError(`Unknown collection '${key}'`);
+    }
     return col;
   }
 
@@ -295,138 +345,229 @@ export function docStore(spec: DocStoreSpec) {
       .max(maxBatch),
   }).strict();
 
-  function requireScopeQuery(c: RequestContext, col: DocCollectionSpec): string | undefined {
+  function requireScopeQuery(c: Context, col: DocCollectionSpec): string | undefined {
     if (!col.scope) return undefined;
     const q = c.req.query('scope');
     if (!q) throw new WorkflowError(`Scoped collection '${col.key}' requires a scope query`);
     return q;
   }
 
-  const router = new Hono<{ Bindings: ApiEnv }>();
+  function routeErrorResponse(c: Context, err: unknown): Response {
+    if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
+    if (err instanceof UnknownCollectionError) return c.json({ error: err.message }, 404);
+    throw err;
+  }
+
+  async function resolveScope(c: Context): Promise<string | null | undefined> {
+    if (spec.scopeOf === undefined) return undefined;
+    return spec.scopeOf(c as unknown as Context<{ Bindings: E }>);
+  }
+
+  function dbOf(c: Context): CrudDb {
+    return getDb(c as unknown as Context<{ Bindings: E }>);
+  }
+
+  const router = new Hono<{ Bindings: E }>();
 
   router.get('/:collection', async (c) => {
     try {
-      requireSpec(c.req.param('collection'));
-    } catch {
-      return c.json({ error: 'Unknown collection', collection: c.req.param('collection') }, 404);
+      const col = requireRoute(c.req.param('collection'));
+      const scope = spec.scopeOf === undefined ? c.req.query('scope') : await resolveScope(c);
+      if (scope === null) return c.json({ error: 'Authentication required' }, 401);
+      return c.json(await listDocs(dbOf(c), col.key, scope));
+    } catch (err) {
+      return routeErrorResponse(c, err);
     }
-    return c.json(await listDocs(getDb(c), c.req.param('collection'), c.req.query('scope')));
   });
 
   router.get('/:collection/:id', async (c) => {
-    let col: DocCollectionSpec;
     try {
-      col = requireSpec(c.req.param('collection'));
-    } catch {
-      return c.json({ error: 'Unknown collection', collection: c.req.param('collection') }, 404);
-    }
-    let scope: string | undefined;
-    try {
-      scope = requireScopeQuery(c, col);
+      const col = requireRoute(c.req.param('collection'));
+      const scope = spec.scopeOf === undefined ? requireScopeQuery(c, col) : await resolveScope(c);
+      if (scope === null) return c.json({ error: 'Authentication required' }, 401);
+      const doc = await getDoc(dbOf(c), col.key, c.req.param('id'), scope);
+      return doc ? c.json(doc) : c.json({ error: 'Document not found' }, 404);
     } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
-      throw err;
+      return routeErrorResponse(c, err);
     }
-    const doc = await getDoc(getDb(c), col.key, c.req.param('id'), scope);
-    return doc ? c.json(doc) : c.json({ error: 'Document not found' }, 404);
   });
 
   router.put('/:collection/:id', validator('json', validateJson(docSchema, 'Invalid document payload')), async (c) => {
-    const key = c.req.param('collection');
-    let col: DocCollectionSpec;
     try {
-      col = requireSpec(key);
-    } catch {
-      return c.json({ error: 'Unknown collection', collection: key }, 404);
-    }
-    const doc = c.req.valid('json') as unknown as DocInput;
-    const fld = idFieldOf(col);
-    if (typeof doc[fld] !== 'string' || (doc[fld] as string).length === 0) {
-      return c.json({ error: 'Invalid document payload', details: { [fld]: ['Required'] } }, 400);
-    }
-    if (doc[fld] !== c.req.param('id')) {
-      return c.json({ error: 'Body id does not match the URL' }, 400);
-    }
-    if (col.scope && typeof doc[col.scope.field] !== 'string') {
-      const q = c.req.query('scope');
-      if (!q) return c.json({ error: `Scoped collection '${key}' requires a scope query` }, 400);
-      doc[col.scope.field] = q;
-    }
-    try {
-      await putDoc(getDb(c), key, doc);
+      const col = requireRoute(c.req.param('collection'));
+      const doc = c.req.valid('json') as unknown as DocInput;
+      const fld = idFieldOf(col);
+      if (typeof doc[fld] !== 'string' || (doc[fld] as string).length === 0) {
+        return c.json({ error: 'Invalid document payload', details: { [fld]: ['Required'] } }, 400);
+      }
+      if (doc[fld] !== c.req.param('id')) {
+        return c.json({ error: 'Body id does not match the URL' }, 400);
+      }
+      const queryMode = spec.scopeOf === undefined;
+      if (queryMode && col.scope && typeof doc[col.scope.field] !== 'string') {
+        const q = c.req.query('scope');
+        if (!q) return c.json({ error: `Scoped collection '${col.key}' requires a scope query` }, 400);
+        doc[col.scope.field] = q;
+      }
+      const scope = queryMode ? undefined : await resolveScope(c);
+      if (scope === null) return c.json({ error: 'Authentication required' }, 401);
+      if (col.scope && scope !== undefined) doc[col.scope.field] = scope;
+      const existing =
+        spec.onPut === undefined
+          ? undefined
+          : await getDoc(dbOf(c), col.key, doc[fld] as string, col.scope ? scope : undefined);
+      if (spec.onPut !== undefined) {
+        await spec.onPut({ key: col.key, doc, existing: existing ?? null, scope: scope ?? undefined });
+      }
+      await putDoc(dbOf(c), col.key, doc);
+      return c.json(doc as Doc, existing ? 200 : 201);
     } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
-      throw err;
+      return routeErrorResponse(c, err);
     }
-    return c.json(doc, 201);
   });
 
   router.patch('/:collection/:id', validator('json', validateJson(patchSchema, 'Invalid patch payload')), async (c) => {
-    const key = c.req.param('collection');
-    let col: DocCollectionSpec;
     try {
-      col = requireSpec(key);
-    } catch {
-      return c.json({ error: 'Unknown collection', collection: key }, 404);
-    }
-    let scope: string | undefined;
-    try {
-      scope = requireScopeQuery(c, col);
-    } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
-      throw err;
-    }
-    try {
-      const merged = await patchDoc(getDb(c), key, c.req.param('id'), c.req.valid('json') as unknown as DocInput, scope);
+      const col = requireRoute(c.req.param('collection'));
+      const scope = spec.scopeOf === undefined ? requireScopeQuery(c, col) : await resolveScope(c);
+      if (scope === null) return c.json({ error: 'Authentication required' }, 401);
+      const patch = c.req.valid('json') as unknown as DocInput;
+      if (spec.onPatch !== undefined) {
+        const existing = await getDoc(dbOf(c), col.key, c.req.param('id'), col.scope ? scope : undefined);
+        await spec.onPatch({ key: col.key, patch, existing: existing ?? null, scope: scope ?? undefined });
+      }
+      const merged = await patchDoc(dbOf(c), col.key, c.req.param('id'), patch, col.scope ? scope : undefined);
       return c.json(merged ?? {});
     } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
-      throw err;
+      return routeErrorResponse(c, err);
     }
   });
 
   router.delete('/:collection/:id', async (c) => {
-    let col: DocCollectionSpec;
     try {
-      col = requireSpec(c.req.param('collection'));
-    } catch {
-      return c.json({ error: 'Unknown collection', collection: c.req.param('collection') }, 404);
-    }
-    let scope: string | undefined;
-    try {
-      scope = requireScopeQuery(c, col);
-    } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
-      throw err;
-    }
-    try {
-      const gone = await softDeleteDoc(getDb(c), col.key, c.req.param('id'), scope);
+      const col = requireRoute(c.req.param('collection'));
+      const scope = spec.scopeOf === undefined ? requireScopeQuery(c, col) : await resolveScope(c);
+      if (scope === null) return c.json({ error: 'Authentication required' }, 401);
+      const gone = await softDeleteDoc(dbOf(c), col.key, c.req.param('id'), col.scope ? scope : undefined);
       return gone ? c.json({ ok: true }) : c.json({ error: 'Document not found' }, 404);
     } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message }, 400);
-      throw err;
+      return routeErrorResponse(c, err);
     }
   });
 
   router.post('/batch', validator('json', validateJson(batchSchema, 'Invalid batch payload')), async (c) => {
-    const applied: { collection: string; id: string }[] = [];
+    const batchError = (err: unknown, extra: Record<string, unknown> = {}): Response | null => {
+      if (err instanceof WorkflowError) return c.json({ error: err.message, ...extra }, 400);
+      if (err instanceof UnknownCollectionError) return c.json({ error: err.message, ...extra }, 404);
+      return null;
+    };
+
+    const scope = await resolveScope(c);
+    if (scope === null) return c.json({ error: 'Authentication required' }, 401);
+
+    if (!spec.bulkBatch) {
+      const applied: { collection: string; id: string }[] = [];
+      try {
+        for (const op of c.req.valid('json').ops) {
+          const col = requireRoute(op.collection);
+          if (op.op === 'put') {
+            const doc = op.doc as DocInput;
+            if (col.scope && scope !== undefined) doc[col.scope.field] = scope;
+            await putDoc(dbOf(c), op.collection, doc);
+            applied.push({ collection: op.collection, id: docIdOf(col, doc) });
+          } else {
+            const delScope = col.scope && scope === undefined ? op.scope : col.scope ? scope : op.scope;
+            await softDeleteDoc(dbOf(c), op.collection, op.id, delScope);
+            applied.push({ collection: op.collection, id: op.id });
+          }
+        }
+      } catch (err) {
+        const mapped = batchError(err, { applied: applied.length });
+        if (mapped !== null) return mapped;
+        throw err;
+      }
+      return c.json({ ok: true, applied: applied.length });
+    }
+
+    const db = dbOf(c);
+    const putsByCollection = new Map<string, Map<string, DocInput>>();
+    const delsByCollection = new Map<string, Set<string>>();
     try {
       for (const op of c.req.valid('json').ops) {
-        requireSpec(op.collection);
-        if (op.op === 'put') {
-          await putDoc(getDb(c), op.collection, op.doc as DocInput);
-          applied.push({ collection: op.collection, id: docIdOf(requireSpec(op.collection), op.doc as DocInput) });
-        } else {
-          await softDeleteDoc(getDb(c), op.collection, op.id, op.scope);
-          applied.push({ collection: op.collection, id: op.id });
+        const col = requireRoute(op.collection);
+        if (op.op === 'del') {
+          const dels = delsByCollection.get(op.collection) ?? new Set<string>();
+          dels.add(op.id);
+          delsByCollection.set(op.collection, dels);
+          continue;
         }
+        const doc = op.doc as DocInput;
+        const id = docIdOf(col, doc);
+        if (col.singletonId && id !== col.singletonId) {
+          throw new WorkflowError(`Collection '${op.collection}' only accepts document id '${col.singletonId}'`);
+        }
+        if (col.scope && scope !== undefined) doc[col.scope.field] = scope;
+        const puts = putsByCollection.get(op.collection) ?? new Map<string, DocInput>();
+        puts.set(id, doc);
+        putsByCollection.set(op.collection, puts);
       }
     } catch (err) {
-      if (err instanceof WorkflowError) return c.json({ error: err.message, applied: applied.length }, 400);
-      if (err instanceof UnknownCollectionError) return c.json({ error: err.message, applied: applied.length }, 404);
+      const mapped = batchError(err);
+      if (mapped !== null) return mapped;
       throw err;
     }
-    return c.json({ ok: true, applied: applied.length });
+
+    try {
+      let applied = 0;
+      for (const [key, docs] of putsByCollection) {
+        const col = requireSpec(key);
+        const existingById = new Map<string, DocInput>();
+        if (col.scope !== undefined && col.scope !== null) {
+          const needsExisting = col.transitions !== undefined || spec.onPut !== undefined;
+          if (needsExisting && scope !== undefined) {
+            const rows = await db
+              .select({ id: col.table.id, data: col.table.data })
+              .from(col.table)
+              .where(and(eq(col.scope.column, scope), inArray(col.table.id, [...docs.keys()])));
+            for (const row of rows) existingById.set(String(row.id), (row.data ?? {}) as DocInput);
+          }
+        } else if (spec.onPut !== undefined) {
+          for (const id of docs.keys()) {
+            const doc = await getDoc(db, key, id);
+            if (doc !== undefined) existingById.set(id, doc);
+          }
+        }
+        for (const doc of docs.values()) {
+          const id = String(doc[idFieldOf(col)]);
+          const existing = existingById.get(id) ?? null;
+          if (spec.onPut !== undefined) await spec.onPut({ key, doc, existing, scope });
+          if (col.transitions !== undefined && existing !== null) {
+            const statusKey = col.statusKey ?? 'status';
+            const from = existing[statusKey];
+            const to = doc[statusKey];
+            if (typeof from === 'string' && typeof to === 'string' && !canTransition(col.transitions, from, to)) {
+              throw new WorkflowError(`Invalid ${key} transition ${from} → ${to}`);
+            }
+          }
+        }
+        applied += await putDocs(db, key, [...docs.values()]);
+      }
+      for (const [key, ids] of delsByCollection) {
+        const col = requireSpec(key);
+        const conds = [inArray(col.table.id, [...ids])];
+        if (col.scope && scope !== undefined) conds.unshift(eq(col.scope.column, scope));
+        await db
+          .update(col.table)
+          .set({ deletedAt: Date.now() } as never)
+          .where(and(...conds));
+        applied += ids.size;
+      }
+      return c.json({ ok: true, applied });
+    } catch (err) {
+      const mapped = batchError(err);
+      if (mapped !== null) return mapped;
+      throw err;
+    }
   });
 
   return {
