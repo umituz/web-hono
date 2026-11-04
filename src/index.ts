@@ -18,6 +18,7 @@
  *   `/client`     apiFetch / apiWrite — the same-origin API client
  *   `/store`      createStore — the fetch-backed reactive store
  *   `/store/react` makeStoreHooks — useQuery/useDbValue/useCollection/useHydration
+ *   `/sync`       snapshotDocs / diffOps / pushOps — the doc-sync diff machine
  *   `/lifecycle`  reset / snapshot / seed — the shared-Neon db lifecycle
  *   `/cookies`    createCookieChannel — one named browser cookie, read/write/clear
  *   `/http`       requestScopeOf / respondWithEtag / internalError / CACHE_CONTROLS
