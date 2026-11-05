@@ -7,9 +7,6 @@ import { ApiError } from '../src/errors';
 import { validateJson } from '../src/validator';
 import type { ApiEnv } from '../src/env';
 
-/* The skeleton, exercised as a full Worker app: health, mounts, middleware
- * order, the JSON-404/SPA boundary, and the onError envelope. */
-
 const env: ApiEnv = {
   DATABASE_URL: '',
   ASSETS: { fetch: async () => new Response('<!doctype html><title>spa</title>', { headers: { 'content-type': 'text/html' } }) },

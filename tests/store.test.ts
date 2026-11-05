@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore, REFETCH_ALL } from '../src/store';
 
-/* The store machine is exercised entirely through a stubbed fetch — no
-   server, no React; these tests pin the
-   contract: hydrate-once, selective refresh, pub/sub, write-then-refresh. */
-
 interface Row {
   id: string;
 }
@@ -13,19 +9,17 @@ interface Flag {
 }
 interface Db {
   items: Row[];
-  flag: Flag; // singleton row, not an array
+  flag: Flag;
 }
 
 function makeStore() {
   return createStore<Db>({
     endpoints: { items: '/api/items', flag: '/api/flag' },
     empty: (): Db => ({ items: [], flag: { on: false } }),
-    bootstrap: false, // these pin the 1.x fan-out contract
+    bootstrap: false,
   });
 }
 
-/** Fetch stub keyed by `METHOD url`; a handler returns a payload (JSON) or a
- *  Response (for failures). Every call is logged for call-count assertions. */
 function stubFetch(handlers: Record<string, () => unknown>) {
   const calls: string[] = [];
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -250,16 +244,12 @@ describe('store 1.3 additions', () => {
     await store.ensureHydrated();
     items = [{ id: 'new' }]; // the write landed server-side…
     await store.http.write('/api/items', { method: 'POST', json: { id: 'new' } }, ['items']);
-    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(2); // refreshed
-    expect(store.getDb().items).toEqual([{ id: 'new' }]); // …and the cache caught up
+    expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(2);
+    expect(store.getDb().items).toEqual([{ id: 'new' }]);
   });
 });
 
 describe('bootstrap hydration (default mode)', () => {
-  /** Fetch stub for the bundled loader: /api/bootstrap answers from
-   *  `serve(paths)` (a results map, or a Response for failures); any other
-   *  path answers from `direct` like the shared stub. Calls are logged by
-   *  METHOD + pathname (query dropped) for count assertions. */
   function stubNet(
     serve: (paths: string[]) => Record<string, { status: number; body?: unknown }> | Response,
     direct: Record<string, () => unknown> = {},

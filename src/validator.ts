@@ -1,19 +1,6 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
 
-/**
- * The single definition of the API's JSON-body validation contract:
- * zod safeParse behind hono's `validator('json', …)` — failures answer
- * `400 { error, details: fieldErrors }`, successes flow the parsed (and
- * `.strict()`, `.trim()`-ed) data into the handler via `c.req.valid('json')`.
- *
- * Usage:
- *   app.post(
- *     '/widgets',
- *     validator('json', validateJson(CreateWidgetSchema, 'Invalid widget payload')),
- *     (c) => { const input = c.req.valid('json'); … },
- *   );
- */
 export function validateJson<S extends z.ZodType>(schema: S, message = 'Invalid request body') {
   return (value: unknown, c: Context) => {
     const parsed = schema.safeParse(value);

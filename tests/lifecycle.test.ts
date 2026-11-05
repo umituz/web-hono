@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { pgTable, text } from 'drizzle-orm/pg-core';
 import { resetTables } from '../src/lifecycle';
 
-/* Only the safety stop is unit-testable — everything else needs a live
- * Neon DB and is proven by the consuming app. The stop
- * fires BEFORE any network call, so the URL below is never contacted. */
-
 const rogue = pgTable('rogue_table', { id: text('id').primaryKey() });
 
 describe('resetTables safety', () => {

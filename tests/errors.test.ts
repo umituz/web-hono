@@ -4,8 +4,6 @@ import { z } from 'zod';
 import { ApiError, apiOnError, isUniqueViolation } from '../src/errors';
 import type { ApiEnv } from '../src/env';
 
-/* The onError matrix, exercised through a real Hono app that throws. */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });

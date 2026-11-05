@@ -8,10 +8,6 @@ import type { ApiEnv } from '../src/env';
 import { makeTestDb, resetDb, testEnv } from './pglite';
 import { widgets } from './helpers';
 
-/* REAL database coverage of the factory (in-memory Postgres) — the paths
- * 1.x could only prove against live Neon: list/POST/PATCH/DELETE success,
- * soft-delete hiding, unique→409, and the additivity pins. */
-
 const CreateWidgetSchema = z.object({ name: z.string().trim().min(1), count: z.number().int().min(0).optional() }).strict();
 
 interface WidgetRow {
@@ -27,8 +23,6 @@ async function insertWidget(db: CrudDb, row: { id: string; name: string; count?:
   await db.insert(widgets).values(row as never);
 }
 
-/** App = createApi + crudRoutes with injected pglite db (proves the whole
- *  chain: factory → db injection → onError envelope). */
 function makeApp(db: CrudDb, spec: { create?: boolean; remove?: boolean } = {}) {
   return createApi<ApiEnv>({
     service: 'crud-test',

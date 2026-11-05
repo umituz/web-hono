@@ -6,7 +6,6 @@ export type UsersLike = PgTable & { id: PgColumn; organizationId: PgColumn };
 export type OrgsLike = PgTable & { id: PgColumn; modes: PgColumn };
 export type NumberedTable = PgTable & { number?: PgColumn; organizationId?: PgColumn; deletedAt?: PgColumn };
 
-/** Organization of the acting user; missing actor → fallback. */
 export async function resolveOrg(
   db: CrudDb,
   users: UsersLike,
@@ -29,14 +28,6 @@ export async function orgHasMode(db: CrudDb, orgs: OrgsLike, orgId: string, mode
   return Array.isArray(org?.modes) && (org.modes as string[]).includes(mode);
 }
 
-/** Next `PREFIX-n` (or `PREFIX-YYYY-NNNN` with year: true) document number:
- *  max numeric suffix +1 among the current year's live rows. Not a
- *  reservation — the partial-unique on number turns races into a 409.
- *  pad applies in EVERY mode — plain `pad: 4` yields `PRD-0001` and reads
- *  padded/legacy rows alike (`PRD-9` still counts as 9). digitsOnly: true
- *  serves prefix-less columns that store the bare integer ("101") — prefix
- *  is ignored, non-numeric rows don't count. scope: numbers per an arbitrary
- *  FK column (workspaceId…) — orgId is the common instance of the same form. */
 export async function nextNumber(
   db: CrudDb,
   table: NumberedTable,

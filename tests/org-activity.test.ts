@@ -5,12 +5,6 @@ import { makeTestDb, resetOrgDb } from './pglite';
 import { orgUsers, orgs, documents, activities, workdocs, trioAudit, trioNotes, textNotes } from './helpers';
 import type { CrudDb } from '../src/crud';
 
-/* REAL-database coverage (in-memory Postgres) of the org-scoped helpers
- *  and activity writes — the exact behaviors the fleet hand-copied per
- *  project: actor→org resolution with demo fallback, hard mode gates,
- *  prefix-scoped document numbering, and audit/notification appends with
- *  server-stamped id/at/defaults. */
-
 let db: CrudDb;
 
 beforeEach(async () => {

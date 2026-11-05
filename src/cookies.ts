@@ -1,25 +1,17 @@
 export type CookieSameSite = 'lax' | 'strict' | 'none';
 
 export interface CookieChannelConfig {
-  /** Wire name of the cookie (`prefs_theme`…). */
   key: string;
-  /** max-age in seconds — long-lived preferences pass a year. */
   maxAgeSeconds: number;
   sameSite: CookieSameSite;
 }
 
 export interface CookieChannel {
-  /** Current value, or null when the cookie is absent/empty. */
   read(): string | null;
   write(value: string): void;
   clear(): void;
 }
 
-/**
- * One named browser cookie, read/write/clear — the only cookie surface apps
- * should hand-roll. Serializes exactly `key=value; path=/; max-age=N;
- * samesite=X` and parses back defensively (values never contain `;`).
- */
 export function createCookieChannel(config: CookieChannelConfig): CookieChannel {
   const prefix = `${config.key}=`;
   return {

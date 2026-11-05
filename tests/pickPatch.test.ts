@@ -28,7 +28,6 @@ describe('pickPatch', () => {
   it('skips junk and empty timestamp strings instead of throwing', () => {
     expect(pickPatch(widgets, { openedAt: 'junk' })).toBeNull();
     expect(pickPatch(widgets, { openedAt: '' })).toBeNull();
-    // junk next to a valid key keeps only the valid one
     expect(pickPatch(widgets, { openedAt: 'junk', name: 'A' })).toEqual({ name: 'A' });
   });
 

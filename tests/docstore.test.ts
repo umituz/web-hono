@@ -6,11 +6,6 @@ import { docsDocs, docsUsers, docsScoped } from './helpers';
 import type { CrudDb } from '../src/crud';
 import type { ApiEnv } from '../src/env';
 
-/* REAL-database coverage (in-memory Postgres) of the jsonb doc-store
- * factory — the exact architecture 30+ fleet apps hand-copied at ~500
- * lines each: doc-verbatim wire, epoch-ms trio, upsert revive, status
- * machines, singleton guard, typed user columns, and the batch op loop. */
-
 let db: CrudDb;
 
 const FLOW: Record<string, string[]> = { draft: ['review'], review: ['done'] };

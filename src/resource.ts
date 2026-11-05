@@ -1,8 +1,6 @@
-/** Default TTL for cached resources — one minute of warm navigations. */
 export const RESOURCE_TTL_MS = 60_000;
 
 export interface Resource<T> {
-  /** Cached value without loading; null when nothing valid was loaded. */
   read(): T | null;
   write(value: T): void;
   subscribe(listener: () => void): () => void;
@@ -12,11 +10,8 @@ export interface Resource<T> {
 }
 
 export interface ResourceConfig<T> {
-  /** Network (or other async) source of truth. */
   load: () => Promise<T>;
-  /** localStorage persistence key, or null for memory-only. */
   storageKey: string | null;
-  /** Validates stored JSON; a null return ignores the persisted value. */
   decode?: (stored: unknown) => T | null;
   ttlMs: number;
 }
@@ -54,13 +49,6 @@ function dropStored(key: string): void {
   memoryStore.delete(key);
 }
 
-/**
- * A TTL-cached async value: read() synchronously, ensure() (deduped,
- * in-flight shared) or refresh() from the network, subscribe() for
- * React re-renders, optional localStorage persistence behind decode().
- * Loads swallow errors and keep the last good value — a failed refresh
- * never blanks a warm cache.
- */
 export function createResource<T>(config: ResourceConfig<T>): Resource<T> {
   const stored = config.storageKey === null ? null : readStored(config.storageKey);
   let value: T | null = stored === null || config.decode === undefined ? null : config.decode(stored);

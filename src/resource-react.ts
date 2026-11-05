@@ -1,10 +1,3 @@
-/* React binding for a createResource instance. The resource is
-   framework-free; apps that don't use React never import this entry.
-   Binding pattern:
-
-     const plans = createResource({ load, storageKey: null, ttlMs: RESOURCE_TTL_MS });
-     const { value, loading } = useResource(plans); */
-
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Resource } from './resource';
 

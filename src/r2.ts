@@ -1,7 +1,5 @@
 import type { Context } from 'hono';
 
-/** The R2 surface streamFromBucket needs — Cloudflare's binding satisfies
- *  it structurally, tests satisfy it with an in-memory fake. */
 export interface R2StreamBucket {
   head(key: string): Promise<{
     size: number;
@@ -16,10 +14,6 @@ export interface RangedRequest {
   length: number;
 }
 
-/**
- * Parse a single-range `bytes=` header against a known size: a valid window,
- * 'invalid' (answer 416), or null (no Range header → full body).
- */
 export function parseRange(header: string | undefined, size: number): RangedRequest | 'invalid' | null {
   if (!header) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
@@ -45,18 +39,10 @@ export function parseRange(header: string | undefined, size: number): RangedRequ
 }
 
 export interface StreamOptions {
-  /** Cache-Control value — CACHE_CONTROLS.privateRevalidate / privateDay. */
   cacheControl: string;
-  /** e.g. `attachment; filename="report.pdf"`. */
   contentDisposition?: string;
 }
 
-/**
- * Serve an R2 object as a Workers response: HEAD support, single-range
- * requests (206 + Content-Range), malformed ranges (416), R2's own ETag
- * and content type. Missing key or empty key answers 404 — callers pass
- * `''` for docs without media.
- */
 export async function streamFromBucket(
   c: Context,
   bucket: R2StreamBucket,

@@ -1,7 +1,5 @@
 import { pgTable, text, timestamp, integer, date, jsonb, boolean, bigint, primaryKey } from 'drizzle-orm/pg-core';
 
-/** Test-only app table: id/text/int/timestamptz/date columns so every
- * column-type branch (pickPatch coercion, seed revive) is reachable. */
 export const widgets = pgTable('wh_widgets', {
   id: text('id').primaryKey(),
   name: text('name'),
@@ -13,8 +11,6 @@ export const widgets = pgTable('wh_widgets', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Date-string-stamped table: updatedAt is a calendar
- *  date column, so the update stamp must be a 'YYYY-MM-DD' string. */
 export const journals = pgTable('wh_journals', {
   id: text('id').primaryKey(),
   note: text('note'),
@@ -23,9 +19,6 @@ export const journals = pgTable('wh_journals', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Org/activity fixtures (org.ts + activity.ts coverage): users/orgs with
- *  the fleet shapes, org-scoped numbered documents, and one append-only
- *  activity table serving both audit and notification writes. */
 export const orgUsers = pgTable('wh_org_users', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id'),
@@ -72,8 +65,6 @@ export const activities = pgTable('wh_activities', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Workspace-scoped documents: an arbitrary FK column — not
- *  organizationId — carries the numbering scope. */
 export const workdocs = pgTable('wh_workdocs', {
   id: text('id').primaryKey(),
   number: text('number'),
@@ -83,7 +74,6 @@ export const workdocs = pgTable('wh_workdocs', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
-/** Trio-convention audit table: createdAt but NO at column. */
 export const trioAudit = pgTable('wh_trio_audit', {
   id: text('id').primaryKey(),
   createdAt: timestamp('created_at', { withTimezone: true }),
@@ -96,7 +86,6 @@ export const trioAudit = pgTable('wh_trio_audit', {
   changes: jsonb('changes'),
 });
 
-/** Trio-convention notification table: createdAt, no at, no read column. */
 export const trioNotes = pgTable('wh_trio_notes', {
   id: text('id').primaryKey(),
   createdAt: timestamp('created_at', { withTimezone: true }),
@@ -105,7 +94,6 @@ export const trioNotes = pgTable('wh_trio_notes', {
   body: text('body'),
 });
 
-/** Doc-store fixture: jsonb data + epoch-ms trio. */
 export const docsDocs = pgTable('wh_docstore', {
   id: text('id').primaryKey(),
   data: jsonb('data'),
@@ -114,7 +102,6 @@ export const docsDocs = pgTable('wh_docstore', {
   deletedAt: bigint('deleted_at', { mode: 'number' }),
 });
 
-/** Doc-store users fixture: typed columns beside the doc body. */
 export const docsUsers = pgTable('wh_docstore_users', {
   id: text('id').primaryKey(),
   data: jsonb('data'),
@@ -125,8 +112,6 @@ export const docsUsers = pgTable('wh_docstore_users', {
   deletedAt: bigint('deleted_at', { mode: 'number' }),
 });
 
-/** Doc-store scoped fixture: composite (facility_id, id) primary key — the
- *  same doc ids live once per facility. */
 export const docsScoped = pgTable(
   'wh_docstore_scoped',
   {
@@ -140,7 +125,6 @@ export const docsScoped = pgTable(
   (t) => [primaryKey({ columns: [t.facilityId, t.id] })],
 );
 
-/** Text-`at` notification fixture: wall-clock ISO strings, not timestamps. */
 export const textNotes = pgTable('wh_text_notes', {
   id: text('id').primaryKey(),
   at: text('at'),

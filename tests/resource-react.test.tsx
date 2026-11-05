@@ -1,12 +1,7 @@
-// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createResource, RESOURCE_TTL_MS } from '../src/resource';
 import { useResource } from '../src/resource-react';
-
-/* useResource against a controllable loader: warm reads skip loading,
-   cold reads flip it off once ensure() settles, and subscribers see
-   writes from anywhere through the resource's pub/sub. */
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

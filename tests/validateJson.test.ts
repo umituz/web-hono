@@ -14,9 +14,6 @@ function app() {
     validator('json', validateJson(WidgetSchema, 'Invalid widget payload')),
     (c) => {
       const input = c.req.valid('json');
-      // Compile-time seam: input must be the zod OUTPUT type (string name,
-      // number count) — if validateJson ever broke hono's inference, this
-      // handler stops compiling under strict mode.
       const name: string = input.name;
       return c.json({ received: name, count: input.count });
     },

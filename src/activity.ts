@@ -34,10 +34,6 @@ export interface NotificationOpts {
 type ColumnMeta = { columnType?: string };
 type Columns = Record<string, ColumnMeta>;
 
-/** Stamps the first present time column — the fleet's `at` plain tables and
- *  the trio-convention (`createdAt`) tables are both served; tables with
- *  neither rely on their column defaults. Text time columns receive the ISO
- *  string form, timestamp columns the Date object. */
 function timeStamp(table: ActivityTable, candidates: string[]): Record<string, Date | string> {
   const columns = getTableColumns(table) as unknown as Columns;
   for (const name of candidates) {

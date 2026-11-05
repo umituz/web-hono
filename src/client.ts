@@ -27,21 +27,10 @@ export async function apiFetch<T>(path: string, init: { method?: 'POST' | 'PATCH
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ApiClientError(body?.error ?? `API ${path} responded ${res.status}`, res.status, body);
   }
-  // Void endpoints (204 / empty body) resolve to undefined — res.json()
-  // would throw a SyntaxError on the empty stream.
   const text = await res.text();
   return (text.length > 0 ? JSON.parse(text) : undefined) as T;
 }
 
-/**
- * The repository write idiom in one call: mutate through the API, then
- * refresh the collections the write touched. Refresh only runs when the
- * write succeeded — failures leave the cache untouched.
- *
- * Hosts with a store/cache layer pass their own `refresh` (and usually wrap
- * this in a typed helper binding their collection keys); `keys` stay plain
- * strings here so the package stays store-agnostic.
- */
 export async function apiWrite<T = void>(
   path: string,
   init: { method: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; json?: unknown },

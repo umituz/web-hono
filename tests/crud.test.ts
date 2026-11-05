@@ -8,14 +8,9 @@ import { apiNotFound, spaFallback } from '../src/handlers';
 import type { ApiEnv } from '../src/env';
 import { journals, widgets } from './helpers';
 
-/** Minimal table WITHOUT the fleet time trio — stamps nothing, never 500s. */
 const bare = pgTable('wh_bare', { id: text('id').primaryKey() });
 
 const crudSchema = z.object({ name: z.string() }).strict();
-
-/* GET/PATCH success paths need a live Neon DB — they are proven by the
- * consuming app's E2E. Covered here: the paths that
- * short-circuit BEFORE any DB call, plus the two app-closing handlers. */
 
 function crudApp() {
   const app = new Hono<{ Bindings: ApiEnv }>();

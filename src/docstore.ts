@@ -10,28 +10,6 @@ import { validateJson } from './validator';
 import type { CrudDb } from './crud';
 import type { ApiEnv } from './env';
 
-/**
- * The doc-store resource factory for jsonb-wire-faithful architectures:
- * the client owns whole documents (nested shapes, client-generated ids,
- * ISO date strings inside the doc) and the table stores them verbatim in
- * one `data jsonb` column beside the epoch-ms bookkeeping trio. The row
- * never leaks — the wire speaks docs only.
- *
- * One call returns the router (GET list / GET-PUT-PATCH-DELETE by id /
- * POST /batch) AND the motor functions (putDoc/patchDoc/softDeleteDoc/
- * listDocs/getDoc) that seed scripts and server-side workflows call
- * directly. Status machines ride along as declarative `transitions` maps and
- * write guards as `validate` hooks; violations surface as WorkflowError → 400.
- *
- * Router config scales it from open admin surfaces to authenticated user
- * sync APIs: `scopeOf` derives the scope per request from the session (401
- * when it resolves null, replacing the `?scope=` query), `routeKeys`
- * allowlists which collections the router serves (others 404 as unknown,
- * staying motor-only), `onPut`/`onPatch` shape writes (server-owned fields,
- * deep merges), and `bulkBatch` runs the batch as grouped bulk writes that
- * keep large syncs inside the Workers subrequest budget.
- */
-
 export type Doc = Record<string, unknown> & { id: string };
 export type DocInput = Record<string, unknown>;
 
@@ -42,31 +20,17 @@ export interface DocScopeSpec {
   field: string;
 }
 
-/**
- * Cross-cutting write guard: runs inside putDoc before the write, covering
- * every path that funnels through it (PUT, PATCH-merged, batch puts,
- * server-side calls) but never putDocs seeds. Receives the incoming doc,
- * the current row when one exists, and the db for cross-collection reads
- * (booking-conflict style rules). Throw WorkflowError (or ApiError) to
- * reject the write.
- */
 export type DocValidateFn = (args: { db: CrudDb; doc: DocInput; existing?: DocInput }) => void | Promise<void>;
 
 export type DocAfterWriteFn = (args: { db: CrudDb; key: string; id: string; doc: Doc; op: 'put' | 'delete' }) => void | Promise<void>;
 
 export interface DocCollectionSpec {
-  /** Wire collection name — the URL segment and the batch op key. */
   key: string;
   table: DocTable;
-  /** Extra typed columns derived from the doc (users: email/name/flags). */
   columns?: (doc: DocInput) => Record<string, unknown>;
-  /** Collections that must always write the one fixed id. */
   singletonId?: string;
-  /** Status state machine: allowed targets per current status. */
   transitions?: Readonly<Record<string, readonly string[]>>;
-  /** Doc field the transitions guard reads. Default 'status'. */
   statusKey?: string;
-  /** Write guard — see DocValidateFn. */
   validate?: DocValidateFn;
   idField?: string;
   scope?: DocScopeSpec;
@@ -75,17 +39,13 @@ export interface DocCollectionSpec {
 
 export interface DocWriteHookArgs {
   key: string;
-  /** Incoming document — hooks may rewrite server-owned fields in place. */
   doc: Record<string, unknown>;
-  /** Current stored doc, or null when the write creates. */
   existing: Record<string, unknown> | null;
-  /** Session scope when `scopeOf` resolved one (else undefined). */
   scope: string | undefined;
 }
 
 export interface DocPatchHookArgs {
   key: string;
-  /** Incoming patch — hooks may rewrite it in place. */
   patch: Record<string, unknown>;
   existing: Doc | null;
   scope: string | undefined;
@@ -93,40 +53,22 @@ export interface DocPatchHookArgs {
 
 export interface DocStoreSpec<E extends ApiEnv = ApiEnv> {
   collections: readonly DocCollectionSpec[];
-  /** Injectable db factory (tests, Hyperdrive). Default: per-request neon-http. */
   db?: (c: Context<{ Bindings: E }>) => CrudDb;
-  /** POST /batch op cap. Default 2000. */
   maxBatch?: number;
-  /** Restrict the generated ROUTER to these keys (authz allowlist — admin
-   *  collections stay motor-only). Others answer 404 as if unknown.
-   *  Default: every collection is routed. */
   routeKeys?: readonly string[];
-  /** Session-derived scope for the router: resolves per request (better-auth
-   *  user id, tenant id…). Null answers 401. When set it replaces the
-   *  `?scope=` query: scoped collections are filtered by it and puts get it
-   *  stamped, so clients cannot read or write another scope's rows. */
   scopeOf?: (c: Context<{ Bindings: E }>) => Promise<string | null>;
-  /** Router-level put shaping (server-owned fields) before the write. */
   onPut?: (args: DocWriteHookArgs) => void | Promise<void>;
-  /** Router-level patch shaping (deep merges, server-owned fields). */
   onPatch?: (args: DocPatchHookArgs) => void | Promise<void>;
-  /** Batch runs as grouped bulk writes — one guard read + chunked upserts
-   *  per collection instead of per-op putDoc — keeping large sync batches
-   *  inside the Workers subrequest budget. Default: per-op. */
   bulkBatch?: boolean;
 }
 
 export class WorkflowError extends Error {}
 export class UnknownCollectionError extends Error {}
 
-/** Status machine check: staying put is always allowed. */
 export function canTransition(map: Readonly<Record<string, readonly string[]>>, from: string, to: string): boolean {
   return from === to || (map[from] ?? []).includes(to);
 }
 
-/** ISO string → epoch ms; anything unparsable falls back to now. The
- *  epoch-0 instant (1970-01-01T00:00:00Z) parses to 0 and must stay 0 —
- *  a truthiness check would silently rewrite it to "now". */
 export function epoch(iso: unknown): number {
   if (typeof iso !== 'string') return Date.now();
   const ms = Date.parse(iso);
@@ -203,8 +145,6 @@ export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
     const id = docIdOf(col, doc);
     const values: Record<string, unknown> = {
       id,
-      // epoch() already falls back to now for unparsable input; the extra
-      // `|| now` would rewrite a legitimate 0 (epoch-0 instant) to now.
       createdAt: epoch(doc.createdAt),
       updatedAt: epoch(doc.updatedAt),
       deletedAt: null as number | null,
@@ -252,9 +192,6 @@ export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
     if (col.afterWrite) await col.afterWrite({ db, key, id, doc: doc as Doc, op: 'put' });
   }
 
-  /** Trusted bulk load for seed scripts: chunked multi-row upsert with the
-   *  same revive semantics as putDoc, without per-row workflow/singleton
-   *  guards (seeds write fresh, consistent datasets by construction). */
   async function putDocs(db: CrudDb, key: string, docs: readonly DocInput[], chunkSize = 200): Promise<number> {
     const col = requireSpec(key);
     let count = 0;

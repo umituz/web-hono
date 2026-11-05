@@ -1,11 +1,7 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createStore } from '../src/store';
 import { makeStoreHooks } from '../src/store-react';
-
-/* The 1.3 hooks against a stubbed fetch: useCollection's channel
-   re-render and the useHydration boot gate (ready + error/retry). */
 
 interface Row {
   id: string;
