@@ -34,15 +34,25 @@ export function requestScopeOf(c: Context, config: RequestScopeConfig): string |
 }
 
 /**
+ * The 304 half of the If-None-Match dance on its own: returns the empty
+ * Not-Modified response when the request's If-None-Match weak-compares
+ * against `etag`, or null when the caller must build and send the full
+ * payload — so routes can skip the expensive work before committing to it.
+ */
+export function notModifiedResponse(c: Context, etag: string): Response | null {
+  if (!matchesEtag(c.req.header('If-None-Match'), etag)) return null;
+  return c.body(null, 304, { ETag: etag, 'Cache-Control': CACHE_CONTROLS.etagRevalidate });
+}
+
+/**
  * The If-None-Match dance in one call: weak-compares the request's
  * If-None-Match against `etag` and answers 304 (ETag + no-cache headers,
  * empty body) or 200 (same headers plus the JSON payload). Payload types
  * stay the caller's — only the transport is shared.
  */
 export function respondWithEtag(c: Context, etag: string, payload: unknown) {
-  if (matchesEtag(c.req.header('If-None-Match'), etag)) {
-    return c.body(null, 304, { ETag: etag, 'Cache-Control': CACHE_CONTROLS.etagRevalidate });
-  }
+  const notModified = notModifiedResponse(c, etag);
+  if (notModified) return notModified;
   c.header('ETag', etag);
   c.header('Cache-Control', CACHE_CONTROLS.etagRevalidate);
   return c.json(payload);
