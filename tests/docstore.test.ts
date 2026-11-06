@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { docStore, epoch, WorkflowError } from '../src/docstore';
+import { docStore, epoch, UnknownCollectionError, WorkflowError } from '../src/docstore';
 import { makeTestDb, resetOrgDb, testEnv } from './pglite';
 import { docsDocs, docsUsers, docsScoped } from './helpers';
 import type { CrudDb } from '../src/crud';
@@ -55,6 +55,24 @@ describe('docStore motor', () => {
     await store.putDoc(db, 'docs', { id: 'd1', title: 'Spec', status: 'draft' });
     expect(await store.listDocs(db, 'docs')).toEqual([{ id: 'd1', title: 'Spec', status: 'draft' }]);
     expect(await store.getDoc(db, 'docs', 'd1')).toEqual({ id: 'd1', title: 'Spec', status: 'draft' });
+  });
+
+  it('lists many collections in one batched round trip', async () => {
+    const { store } = app();
+    await store.putDoc(db, 'docs', { id: 'd1', title: 'A', status: 'draft' });
+    await store.putDoc(db, 'docs', { id: 'd2', title: 'B', status: 'draft' });
+    await store.putDoc(db, 'docs', { id: 'd3', title: 'gone', status: 'draft' });
+    await store.softDeleteDoc(db, 'docs', 'd3');
+    await store.putDoc(db, 'users', { id: 'u1', email: 'a@b.c', name: 'Ada' });
+    const batched = await store.listDocsBatch(db, ['docs', 'users', 'settings']);
+    expect(batched.docs).toEqual([
+      { id: 'd1', title: 'A', status: 'draft' },
+      { id: 'd2', title: 'B', status: 'draft' },
+    ]);
+    expect(batched.users).toEqual([{ id: 'u1', email: 'a@b.c', name: 'Ada' }]);
+    // settings shares the docsDocs table, so it lists the same rows
+    expect(batched.settings).toEqual(batched.docs);
+    await expect(store.listDocsBatch(db, ['nope'])).rejects.toBeInstanceOf(UnknownCollectionError);
   });
 
   it('upserting a soft-deleted doc revives it', async () => {

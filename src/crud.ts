@@ -13,7 +13,10 @@ type RequestContext = Context<{ Bindings: ApiEnv }>;
 function defaultDb(c: RequestContext) {
   return drizzle(neon(c.env.DATABASE_URL));
 }
-export type CrudDb = Pick<NeonHttpDatabase<Record<string, never>>, 'select' | 'insert' | 'update'>;
+export type CrudDb = Pick<NeonHttpDatabase<Record<string, never>>, 'select' | 'insert' | 'update'> & {
+  /** Present on neon-http (production Workers); absent on some local drivers (pglite). */
+  batch?: NeonHttpDatabase<Record<string, never>>['batch'];
+};
 export type CrudDbFactory = (c: RequestContext) => CrudDb;
 
 export type CrudTable = PgTable & { id: PgColumn; deletedAt: PgColumn };

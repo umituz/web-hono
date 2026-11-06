@@ -258,6 +258,38 @@ export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
     return rows.map((r) => r.data as Doc);
   }
 
+  /**
+   * List many collections in ONE Neon HTTP round trip when the driver
+   * supports db.batch (neon-http on Workers). Workers plans cap subrequests
+   * per invocation (50 on the free tier), so hydrating dozens of collections
+   * with parallel listDocs calls trips the cap — this sidesteps it. Drivers
+   * without batch (local pglite) fall back to sequential selects.
+   */
+  async function listDocsBatch(db: CrudDb, keys: readonly string[], scope?: string): Promise<Record<string, Doc[]>> {
+    const cols = keys.map((key) => requireSpec(key));
+    const queries = cols.map((col) => {
+      const conds = [isNull(col.table.deletedAt)];
+      if (col.scope && scope !== undefined) conds.push(eq(col.scope.column, scope));
+      return db
+        .select({ data: col.table.data })
+        .from(col.table)
+        .where(and(...conds))
+        .orderBy(col.table.id);
+    });
+    const out: Record<string, Doc[]> = {};
+    if (typeof db.batch === 'function') {
+      const results = await db.batch(queries as never);
+      cols.forEach((col, i) => {
+        out[col.key] = (results[i] as { data: unknown }[]).map((r) => r.data as Doc);
+      });
+      return out;
+    }
+    for (let i = 0; i < cols.length; i += 1) {
+      out[cols[i].key] = (await queries[i]).map((r) => r.data as Doc);
+    }
+    return out;
+  }
+
   async function getDoc(db: CrudDb, key: string, id: string, scope?: string): Promise<Doc | undefined> {
     const col = requireSpec(key);
     const [row] = await db
@@ -515,6 +547,7 @@ export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
     patchDoc,
     softDeleteDoc,
     listDocs,
+    listDocsBatch,
     getDoc,
   };
 }
