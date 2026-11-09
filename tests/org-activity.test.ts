@@ -142,11 +142,12 @@ describe('writeAudit / writeNotification', () => {
     });
     const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toMatch(/^aud_/);
-    expect(rows[0].at).toBeInstanceOf(Date);
-    expect(rows[0].changes).toEqual([]);
-    expect(rows[0].branchId).toBe('br_1');
-    expect(rows[0].actorName).toBe('Ada');
+    const row = rows[0]!;
+    expect(row.id).toMatch(/^aud_/);
+    expect(row.at).toBeInstanceOf(Date);
+    expect(row.changes).toEqual([]);
+    expect(row.branchId).toBe('br_1');
+    expect(row.actorName).toBe('Ada');
   });
 
   it('keeps provided changes and honors a custom id prefix', async () => {
@@ -165,8 +166,9 @@ describe('writeAudit / writeNotification', () => {
       'log',
     );
     const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
-    expect(rows[0].id).toMatch(/^log_/);
-    expect(rows[0].changes).toEqual([{ field: 'status', from: 'new', to: 'done' }]);
+    const row = rows[0]!;
+    expect(row.id).toMatch(/^log_/);
+    expect(row.changes).toEqual([{ field: 'status', from: 'new', to: 'done' }]);
   });
 
   it('appends a notification row stamped unread', async () => {
@@ -178,9 +180,10 @@ describe('writeAudit / writeNotification', () => {
     });
     const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toMatch(/^ntf_/);
-    expect(rows[0].read).toBe(false);
-    expect(rows[0].at).toBeInstanceOf(Date);
+    const row = rows[0]!;
+    expect(row.id).toMatch(/^ntf_/);
+    expect(row.read).toBe(false);
+    expect(row.at).toBeInstanceOf(Date);
   });
 
   it('writeAudit stamps createdAt when the table carries no at column', async () => {
@@ -194,15 +197,15 @@ describe('writeAudit / writeNotification', () => {
     });
     const rows = (await db.select().from(trioAudit)) as unknown as Record<string, unknown>[];
     expect(rows).toHaveLength(1);
-    expect(rows[0].createdAt).toBeInstanceOf(Date);
+    expect(rows[0]!.createdAt).toBeInstanceOf(Date);
   });
 
   it('writeNotification stamps createdAt and skips read when the table has neither at nor read', async () => {
     await writeNotification(db, trioNotes, { severity: 'info', title: 'T', body: 'B' });
     const rows = (await db.select().from(trioNotes)) as unknown as Record<string, unknown>[];
     expect(rows).toHaveLength(1);
-    expect(rows[0].createdAt).toBeInstanceOf(Date);
-    expect('read' in rows[0]).toBe(false);
+    expect(rows[0]!.createdAt).toBeInstanceOf(Date);
+    expect('read' in rows[0]!).toBe(false);
   });
 });
 
@@ -214,27 +217,28 @@ describe('writeNotification dedupe, severity, and text stamps', () => {
     expect(second).toBe(false);
     const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
     expect(rows).toHaveLength(1);
-    expect(rows[0].title).toBe('T');
+    expect(rows[0]!.title).toBe('T');
   });
 
   it('writes without a severity', async () => {
     const ok = await writeNotification(db, activities, { title: 'T', body: 'B' });
     expect(ok).toBe(true);
     const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
-    expect(rows[0].severity).toBeNull();
+    expect(rows[0]!.severity).toBeNull();
   });
 
   it('stamps the ISO string on a text at column', async () => {
     await writeNotification(db, textNotes, { title: 'T', body: 'B' });
     const rows = (await db.select().from(textNotes)) as unknown as Record<string, unknown>[];
     expect(rows).toHaveLength(1);
-    expect(typeof rows[0].at).toBe('string');
-    expect(rows[0].at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const row = rows[0]!;
+    expect(typeof row.at).toBe('string');
+    expect(row.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('honors the string prefix argument alongside opts objects', async () => {
     await writeNotification(db, activities, { severity: 'info', title: 'T', body: 'B' }, 'note');
     const rows = (await db.select().from(activities)) as unknown as Record<string, unknown>[];
-    expect(rows[0].id).toMatch(/^note_/);
+    expect(rows[0]!.id).toMatch(/^note_/);
   });
 });

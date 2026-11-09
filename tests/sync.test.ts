@@ -20,7 +20,7 @@ describe('snapshotDocs', () => {
     const collections: SyncCollections = { learner: [{ id: 'learner', hearts: 3, updatedAt: 't2' }] };
     const snap = snapshotDocs(collections, { learner: ['updatedAt'] });
     expect(snap.get('learner:learner')).toBe('{"id":"learner","hearts":3}');
-    expect(collections.learner[0].updatedAt).toBe('t2');
+    expect(collections.learner?.[0]?.updatedAt).toBe('t2');
   });
 
   it('skips stripping for collections without an entry', () => {

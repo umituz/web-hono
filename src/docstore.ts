@@ -284,8 +284,10 @@ export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
       });
       return out;
     }
-    for (let i = 0; i < cols.length; i += 1) {
-      out[cols[i].key] = (await queries[i]).map((r) => r.data as Doc);
+    for (const [i, col] of cols.entries()) {
+      const query = queries[i];
+      if (!query) continue;
+      out[col.key] = (await query).map((r) => r.data as Doc);
     }
     return out;
   }
