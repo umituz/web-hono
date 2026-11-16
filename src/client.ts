@@ -17,11 +17,19 @@ export class ApiClientError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init: { method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; json?: unknown } = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init: { method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; json?: unknown; form?: FormData } = {},
+): Promise<T> {
   const res = await fetch(path, {
     method: init.method ?? 'GET',
-    headers: init.json !== undefined ? { 'content-type': 'application/json', accept: 'application/json' } : { accept: 'application/json' },
-    body: init.json !== undefined ? JSON.stringify(init.json) : undefined,
+    headers:
+      init.form !== undefined || init.json !== undefined
+        ? init.form !== undefined
+          ? { accept: 'application/json' }
+          : { 'content-type': 'application/json', accept: 'application/json' }
+        : { accept: 'application/json' },
+    body: init.form !== undefined ? init.form : init.json !== undefined ? JSON.stringify(init.json) : undefined,
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
