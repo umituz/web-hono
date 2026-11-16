@@ -27,6 +27,7 @@ export interface CreateSpec {
   schema: z.ZodType;
   prefix: string;
   defaults?: (c: RequestContext) => Record<string, unknown>;
+  pre?: (c: RequestContext, body: Record<string, unknown>) => Promise<Response | void>;
 }
 
 export interface OrgScopeSpec {
@@ -163,7 +164,7 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
   });
 
   if (spec.create) {
-    const { schema, prefix, defaults } = spec.create;
+    const { schema, prefix, defaults, pre } = spec.create;
     router.post(path, async (c) => {
       const raw = await c.req.json().catch(() => undefined);
       if (raw === undefined || typeof raw !== 'object' || raw === null) {
@@ -174,6 +175,10 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
         return c.json({ error: 'Invalid request body', details: parsed.error.flatten().fieldErrors }, 400);
       }
       const body = normalizeRow(table, parsed.data as Record<string, unknown>);
+      if (pre) {
+        const gate = await pre(c, body);
+        if (gate) return gate;
+      }
       const db = getDb(c);
       const stamped: Record<string, unknown> = {};
       if (spec.orgScope) {
