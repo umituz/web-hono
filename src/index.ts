@@ -3,7 +3,7 @@ export type { ApiConfig } from './api';
 export { healthRouter } from './health';
 export { ApiError, apiOnError, isUniqueViolation } from './errors';
 export { crudRoutes, listRoutes } from './crud';
-export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec } from './crud';
+export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec, OrgScopeSpec } from './crud';
 export { docStore, canTransition, epoch, WorkflowError, UnknownCollectionError } from './docstore';
 export type { Doc, DocInput, DocTable, DocCollectionSpec, DocStoreSpec, DocValidateFn, DocAfterWriteFn, DocScopeSpec, DocWriteHookArgs, DocPatchHookArgs } from './docstore';
 export { getDb } from './db';
