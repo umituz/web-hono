@@ -30,9 +30,16 @@ export interface CreateSpec {
   pre?: (c: RequestContext, body: Record<string, unknown>) => Promise<Response | void>;
 }
 
+export interface ThroughSpec {
+  column: PgColumn;
+  table: PgTable & { id: PgColumn };
+  farmColumn: PgColumn;
+}
+
 export interface OrgScopeSpec {
   column?: PgColumn;
   farmColumn?: PgColumn;
+  through?: ThroughSpec;
   farms?: PgTable & { id: PgColumn; orgId: PgColumn };
   resolve: (c: RequestContext) => Promise<string | null | undefined>;
 }
@@ -55,15 +62,30 @@ export interface CrudSpec extends ListSpec {
 const MAX_LIST_LIMIT = 500;
 
 function assertOrgScope(scope: OrgScopeSpec): void {
-  if (scope.column && scope.farmColumn) throw new Error('orgScope: pass either column or farmColumn, not both');
-  if (!scope.column && !scope.farmColumn) throw new Error('orgScope: column or farmColumn is required');
-  if (scope.farmColumn && !scope.farms) throw new Error('orgScope: farms table is required with farmColumn');
+  const modes = [scope.column, scope.farmColumn, scope.through].filter(Boolean).length;
+  if (modes > 1) throw new Error('orgScope: pass exactly one of column, farmColumn or through');
+  if (modes === 0) throw new Error('orgScope: column, farmColumn or through is required');
+  if ((scope.farmColumn || scope.through) && !scope.farms) throw new Error('orgScope: farms table is required with farmColumn/through');
 }
 
 function orgScopeCondition(scope: OrgScopeSpec, db: CrudDb, orgId: string): SQL {
   if (scope.column) return eq(scope.column, orgId) as SQL;
   const farms = scope.farms!;
-  return inArray(scope.farmColumn!, db.select({ id: farms.id }).from(farms).where(eq(farms.orgId, orgId))) as SQL;
+  const orgFarmIds = db.select({ id: farms.id }).from(farms).where(eq(farms.orgId, orgId));
+  if (scope.through) {
+    const t = scope.through;
+    return inArray(
+      t.column,
+      db.select({ id: t.table.id }).from(t.table).where(inArray(t.farmColumn, orgFarmIds)),
+    ) as SQL;
+  }
+  return inArray(scope.farmColumn!, orgFarmIds) as SQL;
+}
+
+function scopeColumnKeys(spec: ListSpec, scope: OrgScopeSpec): string[] {
+  const cols = getTableColumns(spec.table) as unknown as Record<string, PgColumn>;
+  const targets = new Set([scope.column, scope.farmColumn, scope.through?.column].filter(Boolean) as PgColumn[]);
+  return Object.keys(cols).filter((k) => cols[k] !== undefined && targets.has(cols[k]!));
 }
 
 async function resolveScopedOrg(spec: ListSpec, c: RequestContext): Promise<string | null | undefined> {
@@ -154,6 +176,7 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
       const orgId = await resolveScopedOrg(spec, c);
       if (!orgId) return c.json({ error: 'Sign in to an organization to update this resource' }, 401);
       conds.push(orgScopeCondition(spec.orgScope, db, orgId));
+      for (const key of scopeColumnKeys(spec, spec.orgScope)) delete (patch as Record<string, unknown>)[key];
     }
     const [row] = await db
       .update(table)
@@ -188,6 +211,25 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
         if (scope.column) {
           const key = orgColumnKey(spec, scope.column);
           if (key) stamped[key] = orgId;
+        } else if (scope.through) {
+          const t = scope.through;
+          const key = orgColumnKey(spec, t.column);
+          const parentId = key ? (body[key] as string | undefined) : undefined;
+          if (parentId) {
+            const farms = scope.farms!;
+            const [parent] = await db
+              .select({ farm: t.farmColumn })
+              .from(t.table)
+              .where(eq(t.table.id, parentId))
+              .limit(1);
+            if (!parent) return c.json({ error: 'Linked record not found' }, 400);
+            const [farm] = await db
+              .select({ id: farms.id })
+              .from(farms)
+              .where(and(eq(farms.id, parent.farm), eq(farms.orgId, orgId)))
+              .limit(1);
+            if (!farm) return c.json({ error: 'Linked record belongs to another organization' }, 400);
+          }
         } else {
           const key = orgColumnKey(spec, scope.farmColumn!);
           const farmId = key ? (body[key] as string | undefined) : undefined;
