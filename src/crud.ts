@@ -44,6 +44,10 @@ export interface OrgScopeSpec {
   resolve: (c: RequestContext) => Promise<string | null | undefined>;
 }
 
+export interface AuthSpec {
+  resolve: (c: RequestContext) => Promise<string | null | undefined>;
+}
+
 export interface ListSpec {
   path: string;
   table: PgTable & { deletedAt: PgColumn };
@@ -57,6 +61,7 @@ export interface CrudSpec extends ListSpec {
   label: string;
   create?: CreateSpec;
   remove?: boolean;
+  auth?: AuthSpec;
 }
 
 const MAX_LIST_LIMIT = 500;
@@ -91,6 +96,12 @@ function scopeColumnKeys(spec: ListSpec, scope: OrgScopeSpec): string[] {
 async function resolveScopedOrg(spec: ListSpec, c: RequestContext): Promise<string | null | undefined> {
   if (spec.orgScope) assertOrgScope(spec.orgScope);
   return spec.orgScope?.resolve(c);
+}
+
+async function requireWriteAuth(spec: CrudSpec, c: RequestContext): Promise<Response | void> {
+  if (spec.orgScope || !spec.auth) return;
+  const who = await spec.auth.resolve(c);
+  if (!who) return c.json({ error: 'Sign in to write to this resource' }, 401);
 }
 
 function orgColumnKey(spec: ListSpec, column: PgColumn): string | undefined {
@@ -164,6 +175,8 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
   });
 
   router.patch(`${path}/:id`, async (c) => {
+    const gate = await requireWriteAuth(spec, c);
+    if (gate) return gate;
     const raw = await c.req.json().catch(() => undefined);
     if (raw === undefined) return c.json({ error: 'Malformed JSON in request body' }, 400);
     const patch = pickPatch(table, raw);
@@ -189,6 +202,8 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
   if (spec.create) {
     const { schema, prefix, defaults, pre } = spec.create;
     router.post(path, async (c) => {
+      const gate = await requireWriteAuth(spec, c);
+      if (gate) return gate;
       const raw = await c.req.json().catch(() => undefined);
       if (raw === undefined || typeof raw !== 'object' || raw === null) {
         return c.json({ error: 'Malformed JSON in request body' }, 400);
@@ -254,6 +269,8 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
 
   if (spec.remove) {
     router.delete(`${path}/:id`, async (c) => {
+      const gate = await requireWriteAuth(spec, c);
+      if (gate) return gate;
       const db = getDb(c);
       const conds: SQL[] = [eq(table.id, c.req.param('id')), isNull(table.deletedAt) as SQL];
       if (spec.orgScope) {
