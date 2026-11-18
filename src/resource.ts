@@ -2,6 +2,7 @@ export const RESOURCE_TTL_MS = 60_000;
 
 export interface Resource<T> {
   read(): T | null;
+  readError(): Error | null;
   write(value: T): void;
   subscribe(listener: () => void): () => void;
   ensure(): Promise<T | null>;
@@ -52,6 +53,7 @@ function dropStored(key: string): void {
 export function createResource<T>(config: ResourceConfig<T>): Resource<T> {
   const stored = config.storageKey === null ? null : readStored(config.storageKey);
   let value: T | null = stored === null || config.decode === undefined ? null : config.decode(stored);
+  let error: Error | null = null;
   let expiresAt = 0;
   let inflight: Promise<T | null> | null = null;
   const listeners = new Set<() => void>();
@@ -69,11 +71,14 @@ export function createResource<T>(config: ResourceConfig<T>): Resource<T> {
       try {
         const next = await config.load();
         value = next;
+        error = null;
         expiresAt = Date.now() + config.ttlMs;
         if (config.storageKey !== null) writeStored(config.storageKey, next);
         notify();
         return next;
-      } catch {
+      } catch (err) {
+        error = err instanceof Error ? err : new Error(String(err));
+        notify();
         return value;
       } finally {
         inflight = null;
@@ -85,8 +90,10 @@ export function createResource<T>(config: ResourceConfig<T>): Resource<T> {
 
   return {
     read: () => value,
+    readError: () => error,
     write: (next: T) => {
       value = next;
+      error = null;
       expiresAt = Date.now() + config.ttlMs;
       if (config.storageKey !== null) writeStored(config.storageKey, next);
       notify();
@@ -108,6 +115,7 @@ export function createResource<T>(config: ResourceConfig<T>): Resource<T> {
     },
     clear: () => {
       value = null;
+      error = null;
       expiresAt = 0;
       inflight = null;
       if (config.storageKey !== null) dropStored(config.storageKey);

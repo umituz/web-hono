@@ -3,6 +3,7 @@ import type { Resource } from './resource';
 
 export interface ResourceResult<T> {
   value: T | null;
+  error: Error | null;
   loading: boolean;
 }
 
@@ -11,6 +12,11 @@ export function useResource<T>(resource: Resource<T>): ResourceResult<T> {
     (onChange) => resource.subscribe(onChange),
     () => resource.read(),
     () => resource.read(),
+  );
+  const error = useSyncExternalStore(
+    (onChange) => resource.subscribe(onChange),
+    () => resource.readError(),
+    () => resource.readError(),
   );
   const [loading, setLoading] = useState(resource.read() === null);
 
@@ -28,5 +34,5 @@ export function useResource<T>(resource: Resource<T>): ResourceResult<T> {
     };
   }, [resource]);
 
-  return { value, loading };
+  return { value, loading, error };
 }
