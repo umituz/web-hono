@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { CACHE_CONTROLS, internalError, notModifiedResponse, requestScopeOf, respondWithEtag } from '../src/http';
+import { CACHE_CONTROLS, clientIpOf, internalError, notModifiedResponse, requestScopeOf, respondWithEtag } from '../src/http';
 
 function scopeApp() {
   const app = new Hono();
@@ -97,5 +97,48 @@ describe('internalError', () => {
     const res = await etagApp().request('/boom');
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'sync failed', details: 'TypeError' });
+  });
+});
+
+describe('clientIpOf', () => {
+  function ipApp() {
+    const app = new Hono();
+    app.get('/ip', (c) => c.json({ ip: clientIpOf(c) }));
+    return app;
+  }
+
+  it('prefers cf-connecting-ip', async () => {
+    const res = await ipApp().request('/ip', {
+      headers: {
+        'cf-connecting-ip': '203.0.113.195',
+        'x-forwarded-for': '198.51.100.1',
+        'x-real-ip': '192.0.2.1',
+      },
+    });
+    expect(await res.json()).toEqual({ ip: '203.0.113.195' });
+  });
+
+  it('falls back to x-forwarded-for client part', async () => {
+    const res = await ipApp().request('/ip', {
+      headers: {
+        'x-forwarded-for': '198.51.100.1, 10.0.0.1',
+        'x-real-ip': '192.0.2.1',
+      },
+    });
+    expect(await res.json()).toEqual({ ip: '198.51.100.1' });
+  });
+
+  it('falls back to x-real-ip', async () => {
+    const res = await ipApp().request('/ip', {
+      headers: {
+        'x-real-ip': '192.0.2.1',
+      },
+    });
+    expect(await res.json()).toEqual({ ip: '192.0.2.1' });
+  });
+
+  it('defaults to 127.0.0.1 without headers', async () => {
+    const res = await ipApp().request('/ip');
+    expect(await res.json()).toEqual({ ip: '127.0.0.1' });
   });
 });

@@ -20,3 +20,5 @@ export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';
 export { sendEmail } from './mail';
 export type { MailEnv, SendEmailInput } from './mail';
+export { clientIpOf, requestScopeOf, respondWithEtag, notModifiedResponse, internalError, CACHE_CONTROLS } from './http';
+export type { RequestScopeConfig } from './http';

@@ -43,3 +43,14 @@ export function internalError(c: Context, message: string, err?: unknown) {
     500,
   );
 }
+
+export function clientIpOf(c: Context): string {
+  const headers = c.req.raw.headers;
+  const cfIp = headers.get('cf-connecting-ip');
+  if (cfIp) return cfIp.trim();
+  const xForwarded = headers.get('x-forwarded-for');
+  if (xForwarded) return xForwarded.split(',')[0]!.trim();
+  const xReal = headers.get('x-real-ip');
+  if (xReal) return xReal.trim();
+  return '127.0.0.1';
+}
