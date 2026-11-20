@@ -14,7 +14,9 @@ export function makeStoreHooks<Database extends object>(store: Store<Database>) 
   function useQuery<T>(key: unknown[], fetcher: () => Promise<T>, enabled = true): QueryResult<T> {
     const keyStr = JSON.stringify(key);
     const fetcherRef = useRef(fetcher);
-    fetcherRef.current = fetcher;
+    useEffect(() => {
+      fetcherRef.current = fetcher;
+    });
 
     const [tick, setTick] = useState(0);
     const [state, setState] = useState<{ data?: T; status: 'loading' | 'success' | 'error'; error?: string }>({
@@ -52,12 +54,8 @@ export function makeStoreHooks<Database extends object>(store: Store<Database>) 
 
   function useDbValue<T>(compute: () => T, keys: string[]): T {
     const [, force] = useState(0);
-    const computeRef = useRef(compute);
-    computeRef.current = compute;
-    const valueRef = useRef<T>(compute());
-    valueRef.current = computeRef.current();
     useEffect(() => store.subscribe(keys, () => force((v) => v + 1)), [keys.join(',')]);
-    return valueRef.current;
+    return compute();
   }
 
   function useCollection<K extends keyof Database & string>(key: K): Database[K] {
