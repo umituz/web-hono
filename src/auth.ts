@@ -1,9 +1,11 @@
 import { betterAuth } from 'better-auth';
 import { bearer } from 'better-auth/plugins';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { boolean, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { z } from 'zod';
+import { trio, uid } from './lib';
 
 export interface AuthEnv {
   BETTER_AUTH_SECRET: string;
@@ -145,6 +147,127 @@ export function createAuthGetter<E extends AuthEnv>(opts: AuthOptions<E>): (env:
 export function mountAuth<E extends AuthEnv>(getAuth: (env: E) => AuthInstance): Hono<{ Bindings: E }> {
   const router = new Hono<{ Bindings: E }>();
   router.all('*', (c) => getAuth(c.env).handler(c.req.raw));
+  return router;
+}
+
+function consentTableSet(prefix: string) {
+  return pgTable(
+    `${prefix}_user_consents`,
+    {
+      id: text().primaryKey(),
+      userId: text('user_id').notNull(),
+      termsAccepted: boolean('terms_accepted').notNull(),
+      kvkkAccepted: boolean('kvkk_accepted').notNull(),
+      marketingAccepted: boolean('marketing_accepted').notNull().default(false),
+      version: text().notNull(),
+      ...trio(),
+    },
+    (t) => [index(`${prefix}_user_consents_user_idx`).on(t.userId, t.createdAt)],
+  );
+}
+
+export const consentTable = consentTableSet;
+export type ConsentTable = ReturnType<typeof consentTableSet>;
+
+export function consentDdl(prefix: string): string[] {
+  return [
+    `create table if not exists "${prefix}_user_consents" (id text primary key, user_id text not null, terms_accepted boolean not null, kvkk_accepted boolean not null, marketing_accepted boolean not null default false, version text not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz)`,
+    `create index if not exists "${prefix}_user_consents_user_idx" on "${prefix}_user_consents" (user_id, created_at)`,
+  ];
+}
+
+export const consentSchema = z
+  .object({
+    termsAccepted: z.literal(true),
+    kvkkAccepted: z.literal(true),
+    marketingAccepted: z.boolean(),
+    version: z.string().min(1).max(64),
+  })
+  .strict();
+
+export interface ConsentRouteSpec<E extends AuthEnv = AuthEnv> {
+  db: (env: E) => DbLike;
+  table: ConsentTable;
+}
+
+export interface AuthApiOptions<E extends AuthEnv = AuthEnv> {
+  getAuth: (env: E) => AuthInstance;
+  consent?: ConsentRouteSpec<E>;
+}
+
+type ListedSession = {
+  id?: unknown;
+  token?: unknown;
+  userAgent?: unknown;
+  ipAddress?: unknown;
+  createdAt?: unknown;
+  expiresAt?: unknown;
+};
+
+export function mountAuthApi<E extends AuthEnv>(opts: AuthApiOptions<E>): Hono<{ Bindings: E }> {
+  const router = new Hono<{ Bindings: E }>();
+  if (opts.consent) {
+    const { db, table } = opts.consent;
+    router.get('/consent', async (c) => {
+      const session = await opts.getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+      if (!session) return c.json({ error: 'Sign in first' }, 401);
+      const [row] = await db(c.env)
+        .select()
+        .from(table)
+        .where(eq(table.userId, session.user.id))
+        .orderBy(desc(table.createdAt))
+        .limit(1);
+      return c.json({ consent: row ?? null });
+    });
+    router.post('/consent', async (c) => {
+      const session = await opts.getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+      if (!session) return c.json({ error: 'Sign in first' }, 401);
+      const raw = await c.req.json().catch(() => undefined);
+      const parsed = consentSchema.safeParse(raw);
+      if (!parsed.success) {
+        return c.json({ error: 'Invalid consent payload', details: parsed.error.flatten().fieldErrors }, 400);
+      }
+      const [row] = await db(c.env)
+        .insert(table)
+        .values({
+          id: uid('cns'),
+          userId: session.user.id,
+          termsAccepted: parsed.data.termsAccepted,
+          kvkkAccepted: parsed.data.kvkkAccepted,
+          marketingAccepted: parsed.data.marketingAccepted,
+          version: parsed.data.version,
+        })
+        .returning();
+      return c.json(row, 201);
+    });
+  }
+  router.get('/sessions', async (c) => {
+    const auth = opts.getAuth(c.env);
+    const current = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!current) return c.json({ error: 'Sign in first' }, 401);
+    const listed = (await auth.api.listSessions({ headers: c.req.raw.headers })) as unknown;
+    const rows = Array.isArray(listed)
+      ? (listed as ListedSession[])
+      : listed && typeof listed === 'object' && Array.isArray((listed as { sessions?: unknown[] }).sessions)
+        ? ((listed as { sessions: unknown[] }).sessions as ListedSession[])
+        : [];
+    const currentToken = typeof current.session.token === 'string' ? current.session.token : null;
+    const sessions = rows.map((row) => {
+      const token = typeof row.token === 'string' ? row.token : null;
+      const id = typeof row.id === 'string' ? row.id : (token ?? '');
+      return {
+        id,
+        token,
+        isCurrent: token !== null && currentToken !== null ? token === currentToken : id === current.session.id,
+        userAgent: typeof row.userAgent === 'string' ? row.userAgent : null,
+        ipAddress: typeof row.ipAddress === 'string' ? row.ipAddress : null,
+        createdAt: row.createdAt ?? null,
+        expiresAt: row.expiresAt ?? null,
+      };
+    });
+    return c.json({ sessions });
+  });
+  router.all('*', (c) => opts.getAuth(c.env).handler(c.req.raw));
   return router;
 }
 
