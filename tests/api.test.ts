@@ -152,6 +152,33 @@ describe('createApi', () => {
   it('runs middleware on the bootstrap request and on every replayed path', async () => {
     const { app, seen } = makeApp();
     await app.request('/api/bootstrap?paths=/api/things', undefined, env);
-    expect(seen).toEqual(['mw1', 'mw1']); // once for the bundle, once for the replay
+    expect(seen).toEqual(['mw1', 'mw1']);
+  });
+
+  it('notifies onError sink with error details when an endpoint throws', async () => {
+    const sink = vi.fn();
+    const subRouter = new Hono<{ Bindings: ApiEnv }>();
+    subRouter.get('/fail', () => {
+      throw new Error('boom');
+    });
+
+    const app = createApi<ApiEnv>({
+      service: 'test-api',
+      routers: [['/test', subRouter]],
+      onError: sink,
+    });
+
+    const res = await app.request('/api/test/fail', undefined, env);
+    expect(res.status).toBe(500);
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        path: '/api/test/fail',
+        status: 500,
+        message: 'boom',
+      }),
+      env,
+    );
   });
 });
