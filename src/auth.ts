@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { bearer } from 'better-auth/plugins';
+import type { BetterAuthPlugin } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -94,6 +95,7 @@ export interface AuthOptions<E extends AuthEnv = AuthEnv> {
   tables: AuthTables;
   trustedOrigins?: string[];
   sendResetPassword?: (env: E, args: ResetPasswordArgs) => Promise<void> | void;
+  plugins?: BetterAuthPlugin[] | ((env: E) => BetterAuthPlugin[]);
 }
 
 function initAuth(env: AuthEnv, opts: AuthOptions<AuthEnv>) {
@@ -126,7 +128,7 @@ function initAuth(env: AuthEnv, opts: AuthOptions<AuthEnv>) {
     },
     session: { expiresIn: SESSION_SECONDS, updateAge: UPDATE_AGE_SECONDS },
     trustedOrigins: opts.trustedOrigins ?? [],
-    plugins: [bearer()],
+    plugins: [bearer(), ...(typeof opts.plugins === 'function' ? opts.plugins(env) : (opts.plugins ?? []))],
   });
 }
 

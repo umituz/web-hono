@@ -26,6 +26,26 @@ describe('createAuthGetter', () => {
   it('returns a fresh instance per env', () => {
     expect(getter({ BETTER_AUTH_SECRET: 'a' })).not.toBe(getter({ BETTER_AUTH_SECRET: 'b' }));
   });
+
+  it('merges static and env-derived plugins into the instance options', () => {
+    const staticPlugin = { id: 'static-plugin', version: '1' } as never;
+    const conditionalPlugin = { id: 'conditional-plugin', version: '1' } as never;
+    const withPlugins = createAuthGetter<AuthEnv & { CAPTCHA?: string }>({
+      db: () => ({}) as never,
+      tables,
+      plugins: (env) => (env.CAPTCHA ? [conditionalPlugin] : []),
+    });
+    withPlugins({ BETTER_AUTH_SECRET: 's' });
+    withPlugins({ BETTER_AUTH_SECRET: 's', CAPTCHA: 'x' });
+
+    const plain = createAuthGetter<AuthEnv>({ db: () => ({}) as never, tables, plugins: [staticPlugin] });
+    const instance = plain({ BETTER_AUTH_SECRET: 's' }) as unknown as {
+      options: { plugins: Array<{ id: string }> };
+    };
+    const ids = instance.options.plugins.map((plugin) => plugin.id);
+    expect(ids).toContain('bearer');
+    expect(ids).toContain('static-plugin');
+  });
 });
 
 describe('mountAuth', () => {
