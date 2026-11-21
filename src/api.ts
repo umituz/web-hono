@@ -1,16 +1,31 @@
 import { Hono } from 'hono';
-import type { MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import type { ErrorHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import { apiNotFound, spaFallback } from './handlers';
 import { apiOnError } from './errors';
 import { healthRouter } from './health';
 import type { ApiEnv } from './env';
+
+export interface ApiErrorSinkInfo {
+  method: string;
+  path: string;
+  status: number;
+  message: string;
+  error: unknown;
+}
+
+export type ApiErrorSink<E extends ApiEnv = ApiEnv> = (
+  info: ApiErrorSinkInfo,
+  env: E,
+) => void | Promise<void>;
 
 export interface ApiConfig<E extends ApiEnv = ApiEnv> {
   service: string;
   build?: string;
   routers?: ReadonlyArray<readonly [string, Hono<{ Bindings: E }>]>;
   middleware?: ReadonlyArray<MiddlewareHandler<{ Bindings: E }>>;
+  onError?: ApiErrorSink<E>;
 }
 
 const BOOTSTRAP_MAX_PATHS = 40;
@@ -24,7 +39,31 @@ export function createApi<E extends ApiEnv = ApiEnv>(config: ApiConfig<E>): Hono
 
   const app = new Hono<{ Bindings: E }>();
   app.route('/api', api);
-  app.onError(apiOnError as unknown as ErrorHandler<{ Bindings: E }>);
+  if (config.onError) {
+    const sink = config.onError;
+    const base = apiOnError as unknown as (
+      err: unknown,
+      c: Context<{ Bindings: E }>,
+    ) => Response | Promise<Response>;
+    app.onError((async (err: unknown, c: Context<{ Bindings: E }>) => {
+      const res = await base(err, c);
+      try {
+        await sink(
+          {
+            method: c.req.method,
+            path: c.req.path,
+            status: res.status,
+            message: err instanceof Error ? err.message : String(err),
+            error: err,
+          },
+          c.env,
+        );
+      } catch {}
+      return res;
+    }) as unknown as ErrorHandler<{ Bindings: E }>);
+  } else {
+    app.onError(apiOnError as unknown as ErrorHandler<{ Bindings: E }>);
+  }
 
   app.get('/api/bootstrap', async (c) => {
     const raw = c.req.query('paths') ?? '';

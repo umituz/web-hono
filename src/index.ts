@@ -1,5 +1,5 @@
 export { createApi } from './api';
-export type { ApiConfig } from './api';
+export type { ApiConfig, ApiErrorSink, ApiErrorSinkInfo } from './api';
 export { healthRouter } from './health';
 export { ApiError, apiOnError, isUniqueViolation } from './errors';
 export { crudRoutes, listRoutes } from './crud';
