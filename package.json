@@ -16,7 +16,7 @@
     "./store/react": "./src/store-react.ts",
     "./sync": "./src/sync.ts",
     "./lifecycle": "./src/lifecycle.ts",
-    "./auth": "./src/auth.ts",
+    "./lib": "./src/lib.ts",
     "./mail": "./src/mail.ts",
     "./etag": "./src/etag.ts",
     "./cookies": "./src/cookies.ts",
@@ -70,16 +70,12 @@
   },
   "peerDependencies": {
     "@neondatabase/serverless": "^1.0.0",
-    "better-auth": "^1.7.0",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "better-auth": {
-      "optional": true
-    },
     "react": {
       "optional": true
     }
@@ -92,7 +88,6 @@
     "@testing-library/react": "^16.3.3",
     "@types/node": "~22.13.10",
     "@types/react": "^19.1.0",
-    "better-auth": "^1.7.12",
     "drizzle-orm": "^0.45.4",
     "eslint": "^9.32.0",
     "hono": "^4.13.13",
