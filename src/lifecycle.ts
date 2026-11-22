@@ -1,6 +1,7 @@
 import { getTableName, getTableColumns } from 'drizzle-orm';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -13,6 +14,30 @@ export interface TableSpec {
 export interface SeedSnapshot {
   generatedAt: string;
   tables: Record<string, Record<string, unknown>[]>;
+}
+
+export type SnapshotDb = Pick<NeonHttpDatabase, 'select'>;
+
+export interface SnapshotBytesResult {
+  generatedAt: string;
+  bytes: Uint8Array;
+  total: number;
+  rawBytes: number;
+}
+
+export async function snapshotToBytes(opts: { specs: TableSpec[]; db: SnapshotDb }): Promise<SnapshotBytesResult> {
+  const tables: Record<string, unknown[]> = {};
+  let total = 0;
+  for (const { name, table } of opts.specs) {
+    const rows = (await opts.db.select().from(table)) as unknown[];
+    tables[name] = rows;
+    total += rows.length;
+  }
+  const generatedAt = new Date().toISOString();
+  const payload = JSON.stringify({ generatedAt, tables });
+  const gzipped = new Blob([payload]).stream().pipeThrough(new CompressionStream('gzip'));
+  const bytes = new Uint8Array(await new Response(gzipped).arrayBuffer());
+  return { generatedAt, bytes, total, rawBytes: payload.length };
 }
 
 export async function resetTables(opts: { specs: TableSpec[]; prefix: string; url: string }): Promise<string[]> {
