@@ -1,6 +1,6 @@
 # @umituz/web-hono
 
-The API backend platform for single-Worker apps on Cloudflare (SPA assets + `/api/*` Hono) with Neon Postgres via drizzle. It packages the cross-cutting skeleton proven across the fleet (pilot: [foodora](https://foodora.umituz998.workers.dev)): the `createApi` app factory, the `{ error, details? }` error layer, the full-CRUD resource factory, the schema→client **type bridge**, the same-origin API client, the fetch-backed reactive store (+React hooks), and the shared-Neon database lifecycle scripts.
+The API backend platform for single-Worker apps on Cloudflare (SPA assets + `/api/*` Hono) with Postgres via drizzle. It packages the cross-cutting skeleton proven across the fleet (pilot: [foodora](https://foodora.umituz998.workers.dev)): the `createApi` app factory, the `{ error, details? }` error layer, the full-CRUD resource factory, the schema→client **type bridge**, the same-origin API client, and the fetch-backed reactive store (+React hooks). Database transport (driver creation, `Db` type, reset/snapshot/seed lifecycle) lives in [`@umituz/web-database`](https://github.com/umituz/web-database); auth lives in [`@umituz/web-auth`](https://github.com/umituz/web-auth).
 
 The package is **source-distributed** (published as raw TypeScript in `src/`). Wrangler, Vite, and tsc all compile it alongside your app; no prebuilt bundle ships.
 
@@ -11,7 +11,7 @@ The package is **source-distributed** (published as raw TypeScript in `src/`). W
 - **Contract, not framework.** The package owns cross-cutting conventions only — the error envelope, the soft-delete list read, the setting-patch idiom, literal status codes. Your schema, `TABLE_PREFIX`, zod schemas, domain routers, and business rules stay in your app.
 - **The factory has a hard scope.** `crudRoutes` covers list + create + setting-patch + soft-delete for PLAIN rows only: "does this request merely change a column value?" Entities with business rules (transitions, restock, overlap guards) stay hand-written in their area router.
 - **The schema is the single source of truth.** Client types DERIVE from the drizzle schema (`ClientRow<typeof products>`) — no hand-mirrored interface files that silently drift.
-- **Shared-Neon safety.** The lifecycle scripts drop only tables carrying your project's `TABLE_PREFIX` and refuse to run the moment they see a prefix-less table — one Neon project hosts a whole fleet of products.
+- **Vendor-neutral transport.** The package never imports a database driver: `CrudDb`/`SnapshotDb` derive from `@umituz/web-database`'s `Db`, and default-db fallbacks call its `createDb`. A vendor swap is a web-database release, not a web-hono one.
 
 ## The five pillars
 
@@ -29,7 +29,7 @@ The package is **source-distributed** (published as raw TypeScript in `src/`). W
 npm install @umituz/web-hono
 ```
 
-Peer dependencies (install alongside): `hono ^4`, `drizzle-orm ^0.45`, `@neondatabase/serverless ^1`, `zod ^4`.
+Peer dependencies (install alongside): `hono ^4`, `drizzle-orm ^0.45`, `@umituz/web-database ^1`, `zod ^4`.
 
 ## Quick start
 
@@ -84,7 +84,7 @@ Generates:
 - `PATCH /api/branches/:id` — pickPatch-filtered body, `updatedAt` stamp, `404 'Branch not found'`
 - `DELETE /api/branches/:id` — soft delete → `{ ok: true }` / `404`
 
-Omit `create`/`remove` and exactly GET + PATCH register — the 1.x surface. `listRoutes` is the GET-only sibling for append-only collections (event logs, users). `db` is injectable (`db: (c) => myDb`) — the default builds a per-request neon-http instance as before.
+Omit `create`/`remove` and exactly GET + PATCH register — the 1.x surface. `listRoutes` is the GET-only sibling for append-only collections (event logs, users). `db` is injectable (`db: (c) => myDb`) — the default builds a per-request database via `createDb` from `@umituz/web-database`.
 
 **4. Schema helpers + type bridge** — one encoding of the fleet conventions:
 
@@ -155,12 +155,12 @@ const orders = useCollection('orders'); // typed, re-renders on its channel
 
 The machine: first read hydrates every collection through `GET /api/bootstrap` in small sequential batches (default 12 paths per request — the server replays its own list routes in-process and answers one bundle; collections emit progressively as their batch lands, so the database wakes once instead of once per collection; APIs predating the route answer 404 and hydration falls back to the 1.x parallel fan-out; `bootstrap: false` pins the legacy mode); repositories read synchronously via `getDb()` or `store.read(fn)`; writes go through `store.apiWrite(path, init, keys)` / `store.http.write` which refresh only the touched collections on success and leave the cache untouched on failure; per-collection pub/sub (plus the `__refetch_all__` wildcard) drives the hooks; `view(keys, selector)` gives change-detected derived reads.
 
-**7. Lifecycle scripts** (`scripts/`) — keep only your `TABLE_SPECS` registry and thin wrappers:
+**7. Database lifecycle** — moved to `@umituz/web-database` (3.0): keep only your `TABLE_SPECS` registry and thin wrappers, importing from `@umituz/web-database/lifecycle`:
 
 ```ts
 // scripts/snapshot.ts
 import 'dotenv/config';
-import { snapshotToSeed } from '@umituz/web-hono/lifecycle';
+import { snapshotToSeed } from '@umituz/web-database/lifecycle';
 import { TABLE_SPECS } from './tables';
 
 const url = process.env.DATABASE_URL;
@@ -181,8 +181,6 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 | `@umituz/web-hono/dates` | `isoNow(precision?)`, `isoAt(d, precision?)`, `todayISO()`, `addDaysISO(iso, days)`, `IsoPrecision` — UTC, client-safe (no server imports) |
 | `@umituz/web-hono/store` | `createStore`, `StoreConfig`, `REFETCH_ALL` (+ `read`/`view`/`http`/`subscribeAll`/`snapshot`/`immutable` on the store) |
 | `@umituz/web-hono/store/react` | `makeStoreHooks(store)` → `useQuery`, `useDbValue`, `useCollection`, `useHydration`, `QueryResult` |
-| `@umituz/web-hono/lifecycle` | `resetTables`, `snapshotToSeed`, `seedFromSnapshot`, `TableSpec`, `SeedSnapshot` |
-| `@umituz/web-hono/auth` | `authTables(prefix)`, `AuthTables`, `AuthEnv`, `createAuthGetter`, `AuthOptions`/`AuthInstance`, `mountAuth`, `createSessionHelpers` (`currentUser`/`scopeOf`), `SessionUserInfo` — better-auth (optional peer) over the shared Neon DB |
 
 ## Migration notes (per feature, all optional)
 
@@ -208,7 +206,7 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 npm test
 ```
 
-73 vitest cases cover the pure logic AND — since 1.3, via in-memory Postgres (PGlite) — the factory's real database behavior: list/soft-delete hiding, `?limit&offset&order`, POST create (uid prefix, defaults-under-body, zod 400s, unique→409), PATCH stamping, DELETE, and the 1.x additivity pins (no `create`/`remove` ⇒ POST/DELETE 404, params-less GET unchanged). Plus: pickPatch/stampUpdate filters, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, reset safety stop, createApi chain (health/middleware/onError/JSON-404-vs-SPA), and the store machine (hydration dedupe/retry, refresh selectivity, pub/sub, view memoization, immutable refs, hooks).
+71 vitest cases cover the pure logic AND — since 1.3, via in-memory Postgres (PGlite) — the factory's real database behavior: list/soft-delete hiding, `?limit&offset&order`, POST create (uid prefix, defaults-under-body, zod 400s, unique→409), PATCH stamping, DELETE, and the 1.x additivity pins (no `create`/`remove` ⇒ POST/DELETE 404, params-less GET unchanged). Plus: pickPatch/stampUpdate filters, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, createApi chain (health/middleware/onError/JSON-404-vs-SPA), and the store machine (hydration dedupe/retry, refresh selectivity, pub/sub, view memoization, immutable refs, hooks).
 
 ## License
 

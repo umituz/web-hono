@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { and, asc, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/neon-http';
-import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { createDb } from '@umituz/web-database';
+import type { Db } from '@umituz/web-database';
 import type { Context } from 'hono';
 import type { SQL } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
@@ -12,10 +11,10 @@ import type { ApiEnv } from './env';
 
 type RequestContext = Context<{ Bindings: ApiEnv }>;
 function defaultDb(c: RequestContext) {
-  return drizzle(neon(c.env.DATABASE_URL));
+  return createDb(c.env.DATABASE_URL);
 }
-export type CrudDb = Pick<NeonHttpDatabase<Record<string, never>>, 'select' | 'insert' | 'update'> & {
-  batch?: NeonHttpDatabase<Record<string, never>>['batch'];
+export type CrudDb = Pick<Db, 'select' | 'insert' | 'update'> & {
+  batch?: Db['batch'];
 };
 export type CrudDbFactory = (c: RequestContext) => CrudDb;
 

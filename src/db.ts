@@ -1,7 +1,5 @@
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { createDb } from '@umituz/web-database';
 
 export function getDb<TSchema extends Record<string, unknown>>(env: { DATABASE_URL: string }, schema: TSchema) {
-  const sql = neon(env.DATABASE_URL);
-  return drizzle(sql, { schema });
+  return createDb(env.DATABASE_URL, schema);
 }

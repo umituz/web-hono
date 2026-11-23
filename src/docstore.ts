@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { and, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { createDb } from '@umituz/web-database';
 import { validator } from 'hono/validator';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -76,7 +75,7 @@ export function epoch(iso: unknown): number {
 }
 
 function defaultDb<E extends ApiEnv>(c: Context<{ Bindings: E }>): CrudDb {
-  return drizzle(neon(c.env.DATABASE_URL));
+  return createDb(c.env.DATABASE_URL);
 }
 
 export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
@@ -258,13 +257,6 @@ export function docStore<E extends ApiEnv = ApiEnv>(spec: DocStoreSpec<E>) {
     return rows.map((r) => r.data as Doc);
   }
 
-  /**
-   * List many collections in ONE Neon HTTP round trip when the driver
-   * supports db.batch (neon-http on Workers). Workers plans cap subrequests
-   * per invocation (50 on the free tier), so hydrating dozens of collections
-   * with parallel listDocs calls trips the cap — this sidesteps it. Drivers
-   * without batch (local pglite) fall back to sequential selects.
-   */
   async function listDocsBatch(db: CrudDb, keys: readonly string[], scope?: string): Promise<Record<string, Doc[]>> {
     const cols = keys.map((key) => requireSpec(key));
     const queries = cols.map((col) => {
