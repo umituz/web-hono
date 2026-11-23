@@ -206,7 +206,7 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 npm test
 ```
 
-71 vitest cases cover the pure logic AND — since 1.3, via in-memory Postgres (PGlite) — the factory's real database behavior: list/soft-delete hiding, `?limit&offset&order`, POST create (uid prefix, defaults-under-body, zod 400s, unique→409), PATCH stamping, DELETE, and the 1.x additivity pins (no `create`/`remove` ⇒ POST/DELETE 404, params-less GET unchanged). Plus: pickPatch/stampUpdate filters, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, createApi chain (health/middleware/onError/JSON-404-vs-SPA), and the store machine (hydration dedupe/retry, refresh selectivity, pub/sub, view memoization, immutable refs, hooks).
+280 vitest cases cover the pure logic AND — since 1.3, via in-memory Postgres (PGlite) — the factory's real database behavior: list/soft-delete hiding, `?limit&offset&order`, POST create (uid prefix, defaults-under-body, zod 400s, unique→409), PATCH stamping, DELETE, and the 1.x additivity pins (no `create`/`remove` ⇒ POST/DELETE 404, params-less GET unchanged). Plus: pickPatch/stampUpdate filters, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, createApi chain (health/middleware/onError/JSON-404-vs-SPA), and the store machine (hydration dedupe/retry, refresh selectivity, pub/sub, view memoization, immutable refs, hooks).
 
 ## License
 

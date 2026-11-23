@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { validateJson } from '../src/validator';
-import { actorFields, dateOnly, dateOnlyCoerce, datetimeLocal, datetimeSeconds, hexColor, hhmm } from '../src/validator';
+import { dateOnly, dateOnlyCoerce, datetimeLocal, datetimeSeconds, hexColor, hhmm } from '../src/validator';
 
 const WidgetSchema = z.object({ name: z.string().trim().min(2), count: z.number().int().min(0) }).strict();
 
@@ -123,19 +123,6 @@ describe('hexColor', () => {
       expect(r.success).toBe(false);
       if (!r.success) expect(r.error.issues[0]!.message).toBe('expected #RRGGBB');
     }
-  });
-});
-
-describe('actorFields', () => {
-  it('spreads into a strict schema: both fields optional, absent ok', () => {
-    const Schema = z.object({ note: z.string().min(1), ...actorFields }).strict();
-    expect(Schema.safeParse({ note: 'hi' }).success).toBe(true);
-    expect(Schema.safeParse({ note: 'hi', actorId: 'usr_1', actorName: 'Ada' })).toEqual({
-      success: true,
-      data: { note: 'hi', actorId: 'usr_1', actorName: 'Ada' },
-    });
-    expect(Schema.safeParse({ note: 'hi', actorName: 7 }).success).toBe(false);
-    expect(Schema.safeParse({ note: 'hi', extra: 1 }).success).toBe(false); // still strict
   });
 });
 

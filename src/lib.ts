@@ -8,10 +8,6 @@ export function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${idCounter.toString(36)}`;
 }
 
-export function actor(input: { actorId?: string; actorName?: string }, name = 'Back office'): { actorId: string; actorName: string } {
-  return { actorId: input.actorId ?? 'api', actorName: input.actorName ?? name };
-}
-
 export function trio() {
   return {
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

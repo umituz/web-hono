@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { findRow, softDelete } from '../src/rows';
-import { actor, ApiError } from '../src/index';
+import { ApiError } from '../src/index';
 import { makeTestDb, resetDb } from './pglite';
 import { widgets } from './helpers';
 import type { CrudDb } from '../src/crud';
@@ -50,16 +50,5 @@ describe('softDelete', () => {
     await db.insert(widgets).values({ id: 'w1', name: 'Cog' } as never);
     await softDelete(db, widgets, 'w1', 'Widget');
     await expect(softDelete(db, widgets, 'w1', 'Widget')).rejects.toMatchObject({ status: 404 });
-  });
-});
-
-describe('actor', () => {
-  it('applies the fleet defaults', () => {
-    expect(actor({})).toEqual({ actorId: 'api', actorName: 'Back office' });
-  });
-
-  it('keeps given values and honors the name fallback', () => {
-    expect(actor({ actorId: 'usr_1' }, 'Courier')).toEqual({ actorId: 'usr_1', actorName: 'Courier' });
-    expect(actor({ actorId: 'usr_1', actorName: 'Mira' })).toEqual({ actorId: 'usr_1', actorName: 'Mira' });
   });
 });

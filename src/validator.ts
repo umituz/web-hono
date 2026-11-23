@@ -22,5 +22,3 @@ export const datetimeLocal = z.string().regex(/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]
 export const datetimeSeconds = z.string().regex(/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/, 'expected YYYY-MM-DDTHH:MM:SS');
 
 export const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'expected #RRGGBB');
-
-export const actorFields = { actorId: z.string().optional(), actorName: z.string().optional() } as const;
