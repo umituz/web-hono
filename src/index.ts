@@ -6,7 +6,6 @@ export { crudRoutes, listRoutes } from './crud';
 export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec, OrgScopeSpec, AuthSpec, ThroughSpec } from './crud';
 export { docStore, canTransition, epoch, WorkflowError, UnknownCollectionError } from './docstore';
 export type { Doc, DocInput, DocTable, DocCollectionSpec, DocStoreSpec, DocValidateFn, DocAfterWriteFn, DocScopeSpec, DocWriteHookArgs, DocPatchHookArgs } from './docstore';
-export { getDb } from './db';
 export { uid, pickPatch, patchTypeErrors, normalizeRow, stampUpdate, trio, actor, mapLimit, withRetry } from './lib';
 export { isoNow, isoAt, todayISO, addDaysISO } from './dates';
 export type { IsoPrecision } from './dates';
