@@ -68,6 +68,12 @@ describe('createApi', () => {
     expect(seen).toEqual(['mw1']);
   });
 
+  it('runs middleware on the health canary too', async () => {
+    const { app, seen } = makeApp();
+    await app.request('/api/health', undefined, env);
+    expect(seen).toEqual(['mw1']);
+  });
+
   it('keeps unmatched /api/* paths JSON 404 — never the SPA', async () => {
     const res = await makeApp().app.request('/api/nope', undefined, env);
     expect(res.status).toBe(404);

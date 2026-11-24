@@ -33,8 +33,8 @@ const BOOTSTRAP_MAX_PATHS = 40;
 export function createApi<E extends ApiEnv = ApiEnv>(config: ApiConfig<E>): Hono<{ Bindings: E }> {
   const api = new Hono<{ Bindings: E }>();
 
-  api.route('/health', healthRouter<E>({ service: config.service, build: config.build }));
   for (const mw of config.middleware ?? []) api.use(mw);
+  api.route('/health', healthRouter<E>({ service: config.service, build: config.build }));
   for (const [path, router] of config.routers ?? []) api.route(path, router);
 
   const app = new Hono<{ Bindings: E }>();
