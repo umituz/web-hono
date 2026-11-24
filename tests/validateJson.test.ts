@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
-import { validateJson } from '../src/validator';
+import { looseJson, strictJson, validateJson } from '../src/validator';
 import { dateOnly, dateOnlyCoerce, datetimeLocal, datetimeSeconds, hexColor, hhmm } from '../src/validator';
 
 const WidgetSchema = z.object({ name: z.string().trim().min(2), count: z.number().int().min(0) }).strict();
@@ -44,6 +44,88 @@ describe('validateJson', () => {
     const res = await post(JSON.stringify({ name: '  Gadget  ', count: 3 }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: 'Gadget', count: 3 });
+  });
+});
+
+describe('strictJson', () => {
+  function app() {
+    const app = new Hono();
+    app.post(
+      '/orders',
+      validator('json', strictJson({ sku: z.string().min(1), qty: z.number().int().positive() }, 'Invalid order payload')),
+      (c) => {
+        const input = c.req.valid('json');
+        const sku: string = input.sku;
+        return c.json({ received: sku, qty: input.qty });
+      },
+    );
+    return app;
+  }
+
+  function post(body: string) {
+    return app().request('/orders', { method: 'POST', body, headers: { 'content-type': 'application/json' } });
+  }
+
+  it('accepts a well-formed body and flows typed data to the handler', async () => {
+    const res = await post(JSON.stringify({ sku: 'BREAD-01', qty: 3 }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ received: 'BREAD-01', qty: 3 });
+  });
+
+  it('rejects type violations with the 400 {error, details} envelope', async () => {
+    const res = await post(JSON.stringify({ sku: 'BREAD-01', qty: 0 }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; details: Record<string, string[]> };
+    expect(body.error).toBe('Invalid order payload');
+    expect(Object.keys(body.details)).toContain('qty');
+  });
+
+  it('strips nothing: unknown keys are rejected (strict contract)', async () => {
+    const res = await post(JSON.stringify({ sku: 'BREAD-01', qty: 1, extra: true }));
+    expect(res.status).toBe(400);
+  });
+
+  it('defaults the error message when none is given', async () => {
+    const app2 = new Hono();
+    app2.post('/x', validator('json', strictJson({ a: z.string() })), (c) => c.json({ ok: true, a: c.req.valid('json').a }));
+    const res = await app2.request('/x', {
+      method: 'POST',
+      body: JSON.stringify({ a: 42 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Invalid request body');
+  });
+});
+
+describe('looseJson', () => {
+  const app = new Hono();
+  app.post(
+    '/extras',
+    validator('json', looseJson({ kind: z.string() }, 'Invalid extras payload')),
+    (c) => {
+      const input = c.req.valid('json') as { kind: string } & Record<string, unknown>;
+      return c.json({ kind: input.kind, keys: Object.keys(input).length });
+    },
+  );
+
+  async function post(body: string) {
+    return app.request('/extras', { method: 'POST', body, headers: { 'content-type': 'application/json' } });
+  }
+
+  it('passes unknown keys through instead of rejecting them', async () => {
+    const res = await post(JSON.stringify({ kind: 'note', extra: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ kind: 'note', keys: 2 });
+  });
+
+  it('still rejects violations of the declared keys', async () => {
+    const res = await post(JSON.stringify({ kind: 7 }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; details: Record<string, string[]> };
+    expect(body.error).toBe('Invalid extras payload');
+    expect(Object.keys(body.details)).toContain('kind');
   });
 });
 

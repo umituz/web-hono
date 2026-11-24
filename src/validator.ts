@@ -11,6 +11,14 @@ export function validateJson<S extends z.ZodType>(schema: S, message = 'Invalid 
   };
 }
 
+export function strictJson<S extends z.ZodRawShape>(shape: S, message = 'Invalid request body') {
+  return validateJson(z.strictObject(shape), message);
+}
+
+export function looseJson<S extends z.ZodRawShape>(shape: S, message = 'Invalid request body') {
+  return validateJson(z.looseObject(shape), message);
+}
+
 export const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
 export const dateOnlyCoerce = z.string().min(10).transform((v) => v.slice(0, 10)).pipe(dateOnly);
