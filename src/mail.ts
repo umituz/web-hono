@@ -183,7 +183,7 @@ function toBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromBase64Url(value: string): Uint8Array {
+function fromBase64Url(value: string) {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
   const bytes = new Uint8Array(new ArrayBuffer(binary.length));
@@ -191,9 +191,6 @@ function fromBase64Url(value: string): Uint8Array {
   return bytes;
 }
 
-/** Purpose-scoped signed token: `payload.exp`-capped TTL, HMAC-SHA256
- *  over the purpose + payload, base64url(payload).base64url(sig). A
- *  token minted for one purpose never verifies under another. */
 export async function signMailToken(
   secret: string,
   purpose: string,
@@ -207,9 +204,6 @@ export async function signMailToken(
   return `${encoded}.${toBase64Url(new Uint8Array(sig))}`;
 }
 
-/** Verifies signature, purpose and expiry; returns the payload or null.
- *  Never throws — an invalid token is a null, the caller decides the
- *  honest error surface. */
 export async function verifyMailToken(
   secret: string,
   token: string,
@@ -220,7 +214,7 @@ export async function verifyMailToken(
   const [encoded, sig] = [token.slice(0, dot), token.slice(dot + 1)];
   try {
     const key = await hmacKey(secret, purpose);
-    const ok = await crypto.subtle.verify('HMAC', key, fromBase64Url(sig), encoder.encode(encoded));
+    const ok = await crypto.subtle.verify('HMAC', key, fromBase64Url(sig) as unknown as BufferSource, encoder.encode(encoded));
     if (!ok) return null;
     const body = JSON.parse(new TextDecoder().decode(fromBase64Url(encoded))) as Record<string, string | number | boolean>;
     if (typeof body.exp !== 'number' || body.exp < Math.floor(Date.now() / 1000)) return null;
