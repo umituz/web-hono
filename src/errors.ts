@@ -22,12 +22,24 @@ export class ApiError extends Error {
     return new ApiError(400, message, details);
   }
 
+  static unauthorized(message = 'Unauthorized'): ApiError {
+    return new ApiError(401, message);
+  }
+
   static forbidden(message: string): ApiError {
     return new ApiError(403, message);
   }
 
   static conflict(message: string): ApiError {
     return new ApiError(409, message);
+  }
+
+  static unprocessable(message: string, details?: unknown): ApiError {
+    return new ApiError(422, message, details);
+  }
+
+  static tooManyRequests(message = 'Too many requests'): ApiError {
+    return new ApiError(429, message);
   }
 }
 
@@ -55,6 +67,21 @@ export const apiOnError: ErrorHandler<{ Bindings: ApiEnv }> = (err, c) => {
   }
   if (isUniqueViolation(err)) {
     return c.json({ error: 'Already exists' }, 409);
+  }
+  const anyErr = err as unknown as Record<string, unknown> | null;
+  if (anyErr && typeof anyErr === 'object') {
+    if (anyErr.name === 'NotFoundError' || anyErr.code === 'NOT_FOUND') {
+      return c.json({ error: (anyErr.message as string) || 'Not found', code: 'NOT_FOUND' }, 404);
+    }
+    const status = Number(anyErr.status);
+    if (Number.isInteger(status) && status >= 400 && status < 600) {
+      return c.json(
+        anyErr.details !== undefined
+          ? { error: (anyErr.message as string) || 'Error', details: anyErr.details }
+          : { error: (anyErr.message as string) || 'Error' },
+        status as ContentfulStatusCode,
+      );
+    }
   }
   console.error(`[api] ${c.req.method} ${c.req.path}:`, err);
   return c.json({ error: 'Internal server error' }, 500);

@@ -49,7 +49,7 @@ export interface AuthSpec {
 
 export interface ListSpec {
   path: string;
-  table: PgTable & { deletedAt: PgColumn };
+  table: PgTable & { deletedAt?: PgColumn };
   orderBy?: OrderSpec | ReadonlyArray<OrderSpec>;
   db?: CrudDbFactory;
   orgScope?: OrgScopeSpec;
@@ -115,7 +115,8 @@ export function listRoutes(spec: ListSpec): Hono<{ Bindings: ApiEnv }> {
 
   router.get(path, async (c) => {
     const db = getDb(c);
-    const conds: SQL[] = [isNull(table.deletedAt) as SQL];
+    const hasDeletedAt = 'deletedAt' in table && Boolean((table as { deletedAt?: PgColumn }).deletedAt);
+    const conds: SQL[] = hasDeletedAt ? [isNull((table as unknown as { deletedAt: PgColumn }).deletedAt) as SQL] : [];
     if (spec.orgScope) {
       const orgId = await resolveScopedOrg(spec, c);
       if (!orgId) return c.json({ error: 'Sign in to an organization to list this resource' }, 401);
@@ -137,7 +138,8 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
 
   router.get(path, async (c) => {
     const db = getDb(c);
-    const conds: SQL[] = [isNull(table.deletedAt) as SQL];
+    const hasDeletedAt = 'deletedAt' in table && Boolean((table as { deletedAt?: PgColumn }).deletedAt);
+    const conds: SQL[] = hasDeletedAt ? [isNull((table as unknown as { deletedAt: PgColumn }).deletedAt) as SQL] : [];
     if (spec.orgScope) {
       const orgId = await resolveScopedOrg(spec, c);
       if (!orgId) return c.json({ error: 'Sign in to an organization to list this resource' }, 401);

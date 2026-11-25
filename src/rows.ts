@@ -4,20 +4,32 @@ import { ApiError } from './errors';
 import { stampUpdate } from './lib';
 import type { CrudDb, CrudTable } from './crud';
 
-export type AliveTable = PgTable & { id: PgColumn; deletedAt: PgColumn };
+export type IdTable = PgTable & { id: PgColumn };
+export type AliveTable = PgTable & { id: PgColumn; deletedAt?: PgColumn };
 type RowOf<T> = T extends { $inferSelect: infer R } ? R : never;
 
-export async function findRow<T extends AliveTable>(db: CrudDb, table: T, id: string, label: string): Promise<RowOf<T>> {
-  const rows = (await db.select().from(table as CrudTable).where(and(eq(table.id, id), isNull(table.deletedAt)))) as RowOf<T>[];
+export async function findRow<T extends IdTable>(db: CrudDb, table: T, id: string, label: string): Promise<RowOf<T>> {
+  const hasDeletedAt = 'deletedAt' in table && Boolean((table as { deletedAt?: PgColumn }).deletedAt);
+  const condition = hasDeletedAt
+    ? and(eq(table.id, id), isNull((table as unknown as { deletedAt: PgColumn }).deletedAt))
+    : eq(table.id, id);
+  const rows = (await db.select().from(table as unknown as CrudTable).where(condition)) as RowOf<T>[];
   const row = rows[0];
   if (!row) throw ApiError.notFound(label);
   return row;
 }
 
-export async function softDelete<T extends AliveTable>(db: CrudDb, table: T, id: string, label: string): Promise<RowOf<T>> {
+export async function softDelete<T extends IdTable & { deletedAt: PgColumn }>(
+  db: CrudDb,
+  table: T,
+  id: string,
+  label: string,
+  extraValues?: Record<string, unknown>,
+): Promise<RowOf<T>> {
+  const values = { deletedAt: new Date(), ...stampUpdate(table), ...(extraValues ?? {}) };
   const rows = (await db
     .update(table as CrudTable)
-    .set({ deletedAt: new Date(), ...stampUpdate(table) } as never)
+    .set(values as never)
     .where(and(eq(table.id, id), isNull(table.deletedAt)))
     .returning()) as RowOf<T>[];
   const row = rows[0];

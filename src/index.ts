@@ -13,13 +13,51 @@ export { CSV_CONTENT_TYPE, parseCsv, stringifyCsv } from './csv';
 export type { CsvDelimiter, CsvRow, CsvParseOptions, CsvParseResult, CsvStringifyOptions } from './csv';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';
-export { writeAudit, writeNotification } from './activity';
-export type { ActivityTable, AuditWrite, NotificationWrite, NotificationOpts } from './activity';
+export { writeAudit, writeNotification, diffChanges, auditAction } from './activity';
+export type { ActivityTable, AuditWrite, NotificationWrite, NotificationOpts, DiffOptions } from './activity';
 export { findRow, softDelete } from './rows';
-export type { AliveTable } from './rows';
+export type { IdTable, AliveTable } from './rows';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';
 export { sendEmail, mailTemplateVars, renderMailTemplate, composeMailHtml, composeMailText, signMailToken, verifyMailToken } from './mail';
 export type { MailEnv, SendEmailInput, MailTemplate, RenderedMail, MailLayoutInput } from './mail';
-export { clientIpOf, requestScopeOf, respondWithEtag, notModifiedResponse, internalError, CACHE_CONTROLS } from './http';
-export type { RequestScopeConfig } from './http';
+export {
+  clientIpOf,
+  requestScopeOf,
+  respondWithEtag,
+  notModifiedResponse,
+  internalError,
+  CACHE_CONTROLS,
+  ok,
+  created,
+  noContent,
+  badRequest,
+  unauthorized,
+  forbidden,
+  notFound,
+  conflict,
+  extractBearerToken,
+  parsePagination,
+} from './http';
+export type { RequestScopeConfig, ParsePaginationOptions } from './http';
+export {
+  validateJson,
+  strictJson,
+  looseJson,
+  zBody,
+  zStrictBody,
+  zLooseBody,
+  zQuery,
+  zParam,
+  dateOnly,
+  dateOnlyCoerce,
+  hhmm,
+  datetimeLocal,
+  datetimeSeconds,
+  hexColor,
+  uuid,
+  slug,
+  positiveInt,
+  nonNegativeInt,
+  paginationQuery,
+} from './validator';

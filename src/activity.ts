@@ -35,7 +35,15 @@ type ColumnMeta = { columnType?: string };
 type Columns = Record<string, ColumnMeta>;
 
 function timeStamp(table: ActivityTable, candidates: string[]): Record<string, Date | string> {
-  const columns = getTableColumns(table) as unknown as Columns;
+  let columns: Columns | undefined;
+  try {
+    columns = getTableColumns(table) as unknown as Columns;
+  } catch {
+    columns = undefined;
+  }
+  if (!columns || typeof columns !== 'object') {
+    return { at: new Date().toISOString() };
+  }
   for (const name of candidates) {
     const meta = columns[name];
     if (!meta) continue;
@@ -46,7 +54,13 @@ function timeStamp(table: ActivityTable, candidates: string[]): Record<string, D
 }
 
 function boolStamp(table: ActivityTable, name: string, value: boolean): Record<string, boolean> {
-  const columns = getTableColumns(table) as unknown as Columns;
+  let columns: Columns | undefined;
+  try {
+    columns = getTableColumns(table) as unknown as Columns;
+  } catch {
+    columns = undefined;
+  }
+  if (!columns || typeof columns !== 'object') return {};
   return columns[name] ? { [name]: value } : {};
 }
 
@@ -67,4 +81,67 @@ export async function writeNotification(
   }
   await db.insert(table).values({ id: uid(o.prefix ?? 'ntf'), ...timeStamp(table, ['at', 'createdAt']), ...boolStamp(table, 'read', false), ...n } as never);
   return true;
+}
+
+export interface DiffOptions {
+  exclude?: string[];
+  keys?: string[];
+}
+
+const DEFAULT_EXCLUDED_DIFF_KEYS = new Set([
+  'id',
+  'createdAt',
+  'updatedAt',
+  'deletedAt',
+  'password',
+  'secret',
+  'token',
+]);
+
+export function diffChanges(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  options: DiffOptions = {},
+): { field: string; from: string; to: string }[] {
+  const excluded = options.exclude ? new Set([...DEFAULT_EXCLUDED_DIFF_KEYS, ...options.exclude]) : DEFAULT_EXCLUDED_DIFF_KEYS;
+  const targetKeys = options.keys ?? Object.keys(after);
+  const changes: { field: string; from: string; to: string }[] = [];
+  for (const field of targetKeys) {
+    if (excluded.has(field)) continue;
+    const fromVal = before[field];
+    const toVal = after[field];
+    if (fromVal === toVal) continue;
+    if (typeof fromVal === 'object' && typeof toVal === 'object' && JSON.stringify(fromVal) === JSON.stringify(toVal)) {
+      continue;
+    }
+    changes.push({
+      field,
+      from: fromVal === undefined || fromVal === null ? '' : typeof fromVal === 'object' ? JSON.stringify(fromVal) : String(fromVal),
+      to: toVal === undefined || toVal === null ? '' : typeof toVal === 'object' ? JSON.stringify(toVal) : String(toVal),
+    });
+  }
+  return changes;
+}
+
+export async function auditAction(
+  db: CrudDb,
+  table: ActivityTable,
+  actor: { actorId: string; actorName: string },
+  action: string,
+  entity: { type: string; id: string; label: string },
+  before?: Record<string, unknown>,
+  after?: Record<string, unknown>,
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  const changes = before && after ? diffChanges(before, after) : undefined;
+  await writeAudit(db, table, {
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    action,
+    entityType: entity.type,
+    entityId: entity.id,
+    entityLabel: entity.label,
+    changes,
+    ...extra,
+  });
 }

@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { getCookie } from 'hono/cookie';
 import { matchesEtag } from './etag';
 
@@ -53,4 +54,59 @@ export function clientIpOf(c: Context): string {
   const xReal = headers.get('x-real-ip');
   if (xReal) return xReal.trim();
   return '127.0.0.1';
+}
+
+export function ok(c: Context, data: unknown, status: ContentfulStatusCode = 200) {
+  return c.json(data, status);
+}
+
+export function created(c: Context, data: unknown) {
+  return c.json(data, 201);
+}
+
+export function noContent(c: Context) {
+  return c.body(null, 204);
+}
+
+export function badRequest(c: Context, message = 'Bad request', details?: unknown) {
+  return c.json(details !== undefined ? { error: message, details } : { error: message }, 400);
+}
+
+export function unauthorized(c: Context, message = 'Unauthorized') {
+  return c.json({ error: message }, 401);
+}
+
+export function forbidden(c: Context, message = 'Forbidden') {
+  return c.json({ error: message }, 403);
+}
+
+export function notFound(c: Context, label = 'Resource') {
+  return c.json({ error: `${label} not found` }, 404);
+}
+
+export function conflict(c: Context, message = 'Already exists') {
+  return c.json({ error: message }, 409);
+}
+
+export function extractBearerToken(c: Context): string | null {
+  const header = c.req.header('authorization') ?? c.req.header('Authorization');
+  if (!header) return null;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match && match[1] ? match[1].trim() : null;
+}
+
+export interface ParsePaginationOptions {
+  defaultPageSize?: number;
+  maxPageSize?: number;
+}
+
+export function parsePagination(c: Context, options: ParsePaginationOptions = {}) {
+  const defaultSize = options.defaultPageSize ?? 20;
+  const maxSize = options.maxPageSize ?? 100;
+  const rawPage = Number(c.req.query('page'));
+  const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+  const rawSize = Number(c.req.query('pageSize') ?? c.req.query('limit'));
+  const pageSize = Number.isInteger(rawSize) && rawSize > 0 ? Math.min(rawSize, maxSize) : defaultSize;
+  const offset = (page - 1) * pageSize;
+  return { page, pageSize, offset, limit: pageSize };
 }
