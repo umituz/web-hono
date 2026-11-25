@@ -28,18 +28,6 @@ export async function sendEmail(env: MailEnv, input: SendEmailInput): Promise<vo
   }
 }
 
-/* =========================================================================
-   Mail composition & template rendering (added in 5.2.0).
-
-   Three concerns the app side kept re-implementing per call site:
-   strict {{var}} substitution (a missing variable must be an error, not
-   a silently shipped "Hello, "), a branded table-layout envelope with
-   a plain-text alternative (email a11y baseline), and purpose-scoped
-   signed tokens for logout-free links (unsubscribe, deep links).
-   ========================================================================= */
-
-/** A versioned template. `version` is recorded wherever the render is
- *  logged so template changes stay readable backwards. */
 export interface MailTemplate {
   key: string;
   version: number;
@@ -54,15 +42,10 @@ export interface RenderedMail {
   text: string;
 }
 
-/** All `{{var}}` placeholders in a template body. */
 export function mailTemplateVars(body: string): string[] {
   return [...body.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]!);
 }
 
-/** Strict render: every placeholder in subject/html/text must be present
- *  in `vars`, and every var must be a string/number/boolean — anything
- *  else throws naming the offenders, so a template/vars drift fails at
- *  the send site instead of shipping "Hello, {{name}}". */
 export function renderMailTemplate(template: MailTemplate, vars: Record<string, string | number | boolean>): RenderedMail {
   const missing = new Set<string>();
   const substitute = (body: string): string =>
@@ -84,23 +67,13 @@ export function renderMailTemplate(template: MailTemplate, vars: Record<string, 
   return rendered;
 }
 
-/* --------------------------- branded envelope ---------------------------- */
-
 export interface MailLayoutInput {
-  /** Product name for the masthead + sender line. */
   product: string;
-  /** One-line headline. */
   title: string;
-  /** Leading paragraphs (already HTML-escaped by the caller). */
   intro?: string[];
-  /** Main HTML block — the paragraph/button section the caller owns. */
   bodyHtml: string;
-  /** The one action, if any. */
   button?: { label: string; url: string };
-  /** Small-print paragraph under the body (legal/unsubscribe note). */
   footerNote?: string;
-  /** Pre-built unsubscribe URL (signed token lane) — rendered as the
-   *  standard footer link when present. */
   unsubscribeUrl?: string;
 }
 
@@ -108,10 +81,6 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** Table-layout HTML envelope: inline styles only (clients strip
- *  <style>), one accent button, 600px reading width, works without
- *  images. The plain-text twin below is the a11y/plain alternative —
- *  send both. */
 export function composeMailHtml(input: MailLayoutInput): string {
   const { product, title, intro = [], bodyHtml, button, footerNote, unsubscribeUrl } = input;
   const paragraphs = intro.map((p) => `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#1f2937;">${p}</p>`).join('');
@@ -138,8 +107,6 @@ export function composeMailHtml(input: MailLayoutInput): string {
   ].join('');
 }
 
-/** The plain-text twin of {@link composeMailHtml} — same content, no
- *  markup, URLs inline. */
 export function composeMailText(input: MailLayoutInput): string {
   const { product, title, intro = [], bodyHtml, button, footerNote, unsubscribeUrl } = input;
   const strip = (html: string): string =>
@@ -162,8 +129,6 @@ export function composeMailText(input: MailLayoutInput): string {
   ];
   return lines.filter((l) => l !== '').join('\n');
 }
-
-/* ---------------------------- signed tokens ------------------------------ */
 
 const encoder = new TextEncoder();
 

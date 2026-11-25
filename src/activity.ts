@@ -2,6 +2,8 @@ import { eq, getTableColumns } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { uid } from './lib';
 import type { CrudDb } from './crud';
+import type { ApiErrorSink } from './api';
+import type { ApiEnv } from './env';
 
 export type ActivityTable = PgTable & { id: PgColumn };
 
@@ -144,4 +146,70 @@ export async function auditAction(
     changes,
     ...extra,
   });
+}
+
+export interface ErrorLogWrite {
+  method: string;
+  path: string;
+  status: number;
+  message: string;
+  stack?: string | null;
+  [extra: string]: unknown;
+}
+
+export async function writeErrorLog(
+  db: CrudDb,
+  table: ActivityTable,
+  entry: ErrorLogWrite,
+  prefix = 'err',
+): Promise<void> {
+  let columns: Columns | undefined;
+  try {
+    columns = getTableColumns(table) as unknown as Columns;
+  } catch {
+    columns = undefined;
+  }
+  const payload: Record<string, unknown> = {
+    id: uid(prefix),
+    ...timeStamp(table, ['at', 'createdAt']),
+    method: entry.method,
+    status: entry.status,
+    message: entry.message,
+  };
+  if (columns && 'route' in columns) {
+    payload.route = entry.path;
+  }
+  if (!columns || 'path' in columns) {
+    payload.path = entry.path;
+  }
+  if (entry.stack && (!columns || 'stack' in columns)) {
+    payload.stack = entry.stack;
+  }
+  await db.insert(table).values(payload as never);
+}
+
+export function createErrorLogSink<E extends ApiEnv = ApiEnv>(
+  dbFactory: (env: E) => CrudDb,
+  table: ActivityTable,
+  prefix = 'err',
+): ApiErrorSink<E> {
+  return async (info, env) => {
+    if (info.status < 500) return;
+    try {
+      const db = dbFactory(env);
+      const error = info.error instanceof Error ? info.error : undefined;
+      await writeErrorLog(
+        db,
+        table,
+        {
+          method: info.method,
+          path: info.path,
+          status: info.status,
+          message: info.message,
+          stack: error?.stack,
+        },
+        prefix,
+      );
+    } catch {}
+  };
 }

@@ -88,6 +88,29 @@ export function conflict(c: Context, message = 'Already exists') {
   return c.json({ error: message }, 409);
 }
 
+export function unprocessable(c: Context, message = 'Unprocessable entity', details?: unknown) {
+  return c.json(details !== undefined ? { error: message, details } : { error: message }, 422);
+}
+
+export function tooManyRequests(c: Context, message = 'Too many requests', retryAfterSeconds?: number) {
+  if (typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0) {
+    c.header('Retry-After', String(Math.ceil(retryAfterSeconds)));
+  }
+  return c.json({ error: message }, 429);
+}
+
+export function gone(c: Context, message = 'Resource gone') {
+  return c.json({ error: message }, 410);
+}
+
+export function payloadTooLarge(c: Context, message = 'Payload too large') {
+  return c.json({ error: message }, 413);
+}
+
+export function success(c: Context, extra?: Record<string, unknown>, status: ContentfulStatusCode = 200) {
+  return c.json({ success: true, ...(extra ?? {}) }, status);
+}
+
 export function extractBearerToken(c: Context): string | null {
   const header = c.req.header('authorization') ?? c.req.header('Authorization');
   if (!header) return null;
@@ -109,4 +132,56 @@ export function parsePagination(c: Context, options: ParsePaginationOptions = {}
   const pageSize = Number.isInteger(rawSize) && rawSize > 0 ? Math.min(rawSize, maxSize) : defaultSize;
   const offset = (page - 1) * pageSize;
   return { page, pageSize, offset, limit: pageSize };
+}
+
+export function queryString(c: Context, key: string, defaultValue = ''): string {
+  const value = c.req.query(key);
+  return typeof value === 'string' ? value.trim() : defaultValue;
+}
+
+export function queryInt(
+  c: Context,
+  key: string,
+  defaultValue?: number,
+  options?: { min?: number; max?: number },
+): number | undefined {
+  const raw = c.req.query(key);
+  if (raw === undefined || raw === null || raw.trim() === '') return defaultValue;
+  const num = Number(raw);
+  if (!Number.isInteger(num)) return defaultValue;
+  if (options?.min !== undefined && num < options.min) return options.min;
+  if (options?.max !== undefined && num > options.max) return options.max;
+  return num;
+}
+
+export function queryNumber(c: Context, key: string, defaultValue?: number): number | undefined {
+  const raw = c.req.query(key);
+  if (raw === undefined || raw === null || raw.trim() === '') return defaultValue;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : defaultValue;
+}
+
+export function queryBoolean(c: Context, key: string, defaultValue = false): boolean {
+  const raw = c.req.query(key);
+  if (raw === undefined || raw === null) return defaultValue;
+  const lower = raw.trim().toLowerCase();
+  if (lower === 'true' || lower === '1' || lower === 'yes') return true;
+  if (lower === 'false' || lower === '0' || lower === 'no') return false;
+  return defaultValue;
+}
+
+export function queryArray(c: Context, key: string, delimiter = ','): string[] {
+  const raw = c.req.query(key);
+  if (raw === undefined || raw === null || raw.trim() === '') return [];
+  return raw
+    .split(delimiter)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function paramInt(c: Context, key: string, defaultValue?: number): number | undefined {
+  const raw = c.req.param(key);
+  if (raw === undefined || raw === null || raw.trim() === '') return defaultValue;
+  const num = Number(raw);
+  return Number.isInteger(num) ? num : defaultValue;
 }

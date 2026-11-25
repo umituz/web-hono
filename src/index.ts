@@ -13,8 +13,8 @@ export { CSV_CONTENT_TYPE, parseCsv, stringifyCsv } from './csv';
 export type { CsvDelimiter, CsvRow, CsvParseOptions, CsvParseResult, CsvStringifyOptions } from './csv';
 export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';
-export { writeAudit, writeNotification, diffChanges, auditAction } from './activity';
-export type { ActivityTable, AuditWrite, NotificationWrite, NotificationOpts, DiffOptions } from './activity';
+export { writeAudit, writeNotification, diffChanges, auditAction, writeErrorLog, createErrorLogSink } from './activity';
+export type { ActivityTable, AuditWrite, NotificationWrite, NotificationOpts, DiffOptions, ErrorLogWrite } from './activity';
 export { findRow, softDelete } from './rows';
 export type { IdTable, AliveTable } from './rows';
 export { apiNotFound, spaFallback } from './handlers';
@@ -36,8 +36,19 @@ export {
   forbidden,
   notFound,
   conflict,
+  unprocessable,
+  tooManyRequests,
+  gone,
+  payloadTooLarge,
+  success,
   extractBearerToken,
   parsePagination,
+  queryString,
+  queryInt,
+  queryNumber,
+  queryBoolean,
+  queryArray,
+  paramInt,
 } from './http';
 export type { RequestScopeConfig, ParsePaginationOptions } from './http';
 export {
@@ -49,6 +60,10 @@ export {
   zLooseBody,
   zQuery,
   zParam,
+  zStrictQuery,
+  zLooseQuery,
+  zStrictParam,
+  zLooseParam,
   dateOnly,
   dateOnlyCoerce,
   hhmm,
@@ -60,4 +75,18 @@ export {
   positiveInt,
   nonNegativeInt,
   paginationQuery,
+  email,
+  trimmedString,
+  safeId,
+  sortOrderQuery,
+  booleanQuery,
+  commaSeparatedQuery,
 } from './validator';
+export {
+  securityHeaders,
+  applySecurityHeaders,
+  buildCspString,
+  formatHstsHeader,
+  DEFAULT_PERMISSIONS_POLICY,
+} from './security';
+export type { CspDirectives, HstsOptions, SecurityHeadersOptions } from './security';

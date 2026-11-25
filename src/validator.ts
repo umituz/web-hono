@@ -52,6 +52,22 @@ export function zParam<S extends z.ZodType>(schema: S, message = 'Invalid path p
   });
 }
 
+export function zStrictQuery<S extends z.ZodRawShape>(shape: S, message = 'Invalid query parameters') {
+  return zQuery(z.strictObject(shape), message);
+}
+
+export function zLooseQuery<S extends z.ZodRawShape>(shape: S, message = 'Invalid query parameters') {
+  return zQuery(z.looseObject(shape), message);
+}
+
+export function zStrictParam<S extends z.ZodRawShape>(shape: S, message = 'Invalid path parameters') {
+  return zParam(z.strictObject(shape), message);
+}
+
+export function zLooseParam<S extends z.ZodRawShape>(shape: S, message = 'Invalid path parameters') {
+  return zParam(z.looseObject(shape), message);
+}
+
 export const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
 export const dateOnlyCoerce = z.string().min(10).transform((v) => v.slice(0, 10)).pipe(dateOnly);
@@ -76,3 +92,24 @@ export const paginationQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+export const email = z.string().trim().toLowerCase().pipe(z.string().email());
+
+export function trimmedString(min = 1, max = 255) {
+  return z.string().trim().min(min).max(max);
+}
+
+export const safeId = z.string().trim().min(1).max(128);
+
+export const sortOrderQuery = z.enum(['asc', 'desc']).default('asc');
+
+export const booleanQuery = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.enum(['true', 'false', '1', '0', 'yes', 'no']))
+  .transform((v) => v === 'true' || v === '1' || v === 'yes');
+
+export const commaSeparatedQuery = z
+  .string()
+  .transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean));

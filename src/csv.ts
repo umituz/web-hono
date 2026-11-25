@@ -1,20 +1,5 @@
-/* CSV codec for import/export lanes (influencera Faz 27, TODO 1042/1068).
- * Dependency-free on purpose — no Hono, no Workers, no database — so the
- * same module serves route handlers (parse uploaded text, serialize
- * query results) and scripts. Parsing is RFC-4180 with the tolerances
- * real spreadsheet exports demand: UTF-8 BOM stripped, comma/semicolon
- * delimiter sniffed from the header line, CRLF/LF/CR all end records,
- * blank lines are skipped, and every data row carries its 1-based data
- * index AND physical line number so validators can report "row 7 (line
- * 8): invalid email" instead of a bare string error. Serialization
- * quotes when needed and neutralizes spreadsheet formula injection
- * (=,+,-,@, tab) by default — exports are opened in Excel. */
-
 export type CsvDelimiter = ',' | ';';
 
-/** A parsed data record. `index` counts data rows (header excluded);
- * `line` is the physical line where the record starts — the two differ
- * once a quoted value spans lines. */
 export interface CsvRow {
   index: number;
   line: number;
@@ -22,30 +7,22 @@ export interface CsvRow {
 }
 
 export interface CsvParseOptions {
-  /** Comma vs semicolon. Omit to sniff from the header line (majority
-   * of unquoted occurrences; ties and no-evidence fall back to comma). */
   delimiter?: CsvDelimiter;
-  /** Parse at most this many data rows — the preview step. */
   maxRows?: number;
 }
 
 export interface CsvParseResult {
   delimiter: CsvDelimiter;
-  /** First non-blank record, cells trimmed. Empty input → []. */
   headers: string[];
   rows: CsvRow[];
-  /** True when maxRows stopped the parse with input remaining. */
   truncated: boolean;
 }
 
-/** Content type for CSV responses (UTF-8 declared — Excel honors it). */
 export const CSV_CONTENT_TYPE = 'text/csv; charset=utf-8';
 
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 function sniffDelimiter(text: string): CsvDelimiter {
-  // Only the header line votes, and only occurrences outside quotes —
-  // a quoted header cell with a comma must not elect the comma.
   let commas = 0;
   let semis = 0;
   let inQuotes = false;
@@ -59,10 +36,6 @@ function sniffDelimiter(text: string): CsvDelimiter {
   return semis > commas ? ';' : ',';
 }
 
-/** Parse CSV text. Never throws on shape — ragged rows, stray quotes and
- * unterminated quoting all produce values; STRICTNESS (row length vs
- * headers, field formats, unknown headers) belongs to the caller's
- * validator, which is where row numbers become error messages. */
 export function parseCsv(input: string, opts: CsvParseOptions = {}): CsvParseResult {
   const text = input.startsWith(BOM) ? input.slice(BOM.length) : input;
   const delimiter = opts.delimiter ?? sniffDelimiter(text);
@@ -72,7 +45,7 @@ export function parseCsv(input: string, opts: CsvParseOptions = {}): CsvParseRes
   let values: string[] = [];
   let field = '';
   let inQuotes = false;
-  let fieldStarted = false; // a field that had any content or a quote
+  let fieldStarted = false;
   let line = 1;
   let recordLine = 1;
 
@@ -83,8 +56,6 @@ export function parseCsv(input: string, opts: CsvParseOptions = {}): CsvParseRes
   };
   const pushRecord = () => {
     pushField();
-    // Skip blank lines: a record of exactly one empty field that never
-    // saw content or quotes. "a,,\n" is three fields and stays.
     if (values.length === 1 && values[0] === '' && !recordHadContent) {
       values = [];
       return;
@@ -133,14 +104,11 @@ export function parseCsv(input: string, opts: CsvParseOptions = {}): CsvParseRes
       line += 1;
       continue;
     }
-    if (ch === BOM) continue; // stray mid-file BOM: drop
+    if (ch === BOM) continue;
     markContent();
     fieldStarted = true;
     field += ch;
   }
-  // Trailing record without a final newline. An unterminated quote does
-  // NOT grow the field — the tolerant read is "field is what
-  // accumulated", never a fabricated closing quote.
   if (field !== '' || values.length > 0 || inQuotes) {
     pushRecord();
   }
@@ -161,11 +129,7 @@ export function parseCsv(input: string, opts: CsvParseOptions = {}): CsvParseRes
 }
 
 export interface CsvStringifyOptions {
-  /** Prepended as the first record when given. */
   header?: string[];
-  /** Neutralize spreadsheet formula injection (=, +, -, @, tab) by
-   * prefixing a single quote. Default true. A leading minus on a cell
-   * that parses as a number is left alone — ledgers export negatives. */
   excelSafe?: boolean;
 }
 
@@ -184,8 +148,6 @@ function excelNeutralize(value: string): string {
     return `'${value}`;
   }
   if (first === '-' && !Number.isNaN(Number(value.slice(1))) && value.slice(1) !== '') {
-    // "-42" is a negative number, not a formula — keep it sortable.
-    // But "-1+1|cmd" is not a number and gets the quote.
     return value;
   }
   if (first === '-' && Number.isNaN(Number(value.slice(1)))) {
@@ -199,8 +161,6 @@ function encodeField(value: string, delimiter: CsvDelimiter, excelSafe: boolean)
   return needsQuote(v, delimiter) ? `"${v.replaceAll('"', '""')}"` : v;
 }
 
-/** Serialize rows as RFC-4180 CSV: CRLF record separators, quoting only
- * when a field contains the delimiter, a quote or a newline. */
 export function stringifyCsv(
   rows: (string | number | null | undefined)[][],
   opts: CsvStringifyOptions = {},
