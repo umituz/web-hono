@@ -6,9 +6,14 @@
  * Settings page or a "view as role" preview needs. Three design rules
  * are load-bearing:
  *
- * 1. MOST-RESTRICTED DEFAULT — a field absent from an entity's rule set
- *    is invisible (and unwritable) for every role. New columns must be
- *    granted explicitly, never leaked by omission.
+ * 1. RESTRICTED-BY-LISTING — an entity's rule set names its SENSITIVE
+ *    fields: a listed field flows only to the roles on its read list,
+ *    everyone else (including anonymous and unknown roles) gets it
+ *    dropped. A field the entity does not list is UNGOVERNED — it flows
+ *    to every reader, which is exactly why the footprint counter and
+ *    the host's completeness pin matter: a new sensitive column left
+ *    unlisted is a leak, so hosts add it the same commit it gains its
+ *    meaning.
  * 2. FLAT FIELD GRANULARITY — rules key on top-level row fields. A rule
  *    on `budget` masks the whole budget object; consumers never see a
  *    half-projection of a nested structure (a masked budget leaking its
@@ -87,15 +92,19 @@ function resolutionOf(matrix: FieldMatrix, entity: string, role: RoleLike): Reso
   return hit;
 }
 
-/** May this role read this field? Absence from the matrix = no. */
+/** May this role read this field? A listed field needs the role on its
+ *  read list; an unlisted field is ungoverned and flows to anyone. */
 export function canReadField(matrix: FieldMatrix, entity: string, field: string, role: RoleLike): boolean {
-  return resolutionOf(matrix, entity, role).visible.has(field);
+  const listed = matrix[entity]?.[field];
+  return listed ? listed.read.includes(role ?? '') : true;
 }
 
-/** May this role write this field through a generic lane? Never truer
- *  than read. */
+/** May this role write this field through a generic lane? Listed fields
+ *  need the role on the write list (never truer than read); unlisted
+ *  fields are ungoverned — the route's own validation owns them. */
 export function canWriteField(matrix: FieldMatrix, entity: string, field: string, role: RoleLike): boolean {
-  return resolutionOf(matrix, entity, role).writable.has(field);
+  const listed = matrix[entity]?.[field];
+  return listed ? (listed.write ?? listed.read).includes(role ?? '') : true;
 }
 
 /** The fields of `entity` this role may read — a Settings matrix table
@@ -110,15 +119,18 @@ export function writableFieldsFor(matrix: FieldMatrix, entity: string, role: Rol
   return [...resolutionOf(matrix, entity, role).writable];
 }
 
-/** Mask one row for a role: keys the role may not read are dropped
- *  whole (flat granularity — nested shapes never half-leak). Returns
- *  a NEW row; the input is never mutated. */
+/** Mask one row for a role: LISTED fields the role may not read are
+ *  dropped whole (flat granularity — nested shapes never half-leak);
+ *  unlisted keys flow. Anonymous/unknown roles read nothing listed, so
+ *  they carry the strictest row the entity can produce. Returns a NEW
+ *  row; the input is never mutated. */
 export function maskRow<T extends Record<string, unknown>>(matrix: FieldMatrix, entity: string, row: T, role: RoleLike): Record<string, unknown> {
+  const rules = matrix[entity];
+  if (!rules) return row;
   const { visible } = resolutionOf(matrix, entity, role);
-  if (visible.size === 0) return row;
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(row)) {
-    if (!visible.has(key)) continue;
+    if (rules[key] && !visible.has(key)) continue;
     out[key] = row[key];
   }
   return out;
@@ -126,8 +138,7 @@ export function maskRow<T extends Record<string, unknown>>(matrix: FieldMatrix, 
 
 /** Mask a list of rows for a role (list endpoints). */
 export function maskRows<T extends Record<string, unknown>>(matrix: FieldMatrix, entity: string, rows: T[], role: RoleLike): Record<string, unknown>[] {
-  const { visible } = resolutionOf(matrix, entity, role);
-  if (visible.size === 0) return rows;
+  if (!matrix[entity]) return rows;
   return rows.map((row) => maskRow(matrix, entity, row, role));
 }
 
@@ -141,13 +152,14 @@ export interface PatchViolation {
  *  its own audit row (a write refusal names the fields, never a bare
  *  404, because the row's existence is not the secret — the field is). */
 export function patchViolations(matrix: FieldMatrix, entity: string, patch: Record<string, unknown>, role: RoleLike): PatchViolation {
+  const rules = matrix[entity];
+  if (!rules) return { fields: [] };
   const { writable } = resolutionOf(matrix, entity, role);
   const fields: string[] = [];
   for (const key of Object.keys(patch)) {
-    // Absence from the matrix entirely = masked for this role too
-    // (most-restricted default), which also means not writable here.
-    if (matrix[entity]?.[key] && !writable.has(key)) fields.push(key);
-    if (!matrix[entity]?.[key]) fields.push(key);
+    // Only LISTED fields are governed: a listed field the role can't
+    // write is named; unlisted keys stay with the route's own validation.
+    if (rules[key] && !writable.has(key)) fields.push(key);
   }
   return { fields };
 }
