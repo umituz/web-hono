@@ -256,6 +256,20 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
         return c.json({ error: 'Invalid request body', details: parsed.error.flatten().fieldErrors }, 400);
       }
       const body = normalizeRow(table, parsed.data as Record<string, unknown>);
+      if (spec.policy) {
+        /* Listed fields the role cannot WRITE cannot enter through the
+         * create lane either — the same field-level refusal PATCH uses
+         * (read ⊆ write holds on every generic lane, not just updates).
+         * The refusal names the fields so a client never wonders. */
+        const violation = patchViolations(spec.policy.matrix, spec.policy.entity, body, spec.policy.roleOf(c));
+        if (violation.fields.length > 0) {
+          const { onViolation } = spec.policy;
+          if (onViolation) {
+            await onViolation({ c, fields: violation.fields });
+          }
+          return c.json({ error: 'These fields are read-only for your role', details: { fields: violation.fields } }, 403);
+        }
+      }
       if (pre) {
         const gate = await pre(c, body);
         if (gate) return gate;
