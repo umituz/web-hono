@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
-import { findOrgRow, findRow, updateOrgRow, softDelete, softDeleteOrgRow, deleteOrgRow } from '../src/rows';
+import { desc, eq } from 'drizzle-orm';
+import {
+  findOrgRow,
+  findRow,
+  updateOrgRow,
+  softDelete,
+  softDeleteOrgRow,
+  deleteOrgRow,
+  findManyByOrg,
+  countOrgRows,
+  paginateOrgRows,
+} from '../src/rows';
 import { ApiError } from '../src/index';
 import { makeTestDb, resetDb, resetOrgDb } from './pglite';
 import { documents, widgets } from './helpers';
@@ -113,5 +123,63 @@ describe('deleteOrgRow', () => {
   it('throws 404 when deleting row from different organization', async () => {
     await db.insert(documents).values({ id: 'd7', organizationId: 'org_del', number: 'DEL-7' } as never);
     await expect(deleteOrgRow(db, documents, 'd7', 'org_wrong', 'Document')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('findManyByOrg', () => {
+  it('returns all live rows belonging to organization', async () => {
+    await db.insert(documents).values({ id: 'm1', organizationId: 'org_many', number: 'DOC-1' } as never);
+    await db.insert(documents).values({ id: 'm2', organizationId: 'org_many', number: 'DOC-2' } as never);
+    await db.insert(documents).values({ id: 'm3', organizationId: 'org_other', number: 'DOC-3' } as never);
+    await db.insert(documents).values({ id: 'm4', organizationId: 'org_many', number: 'DOC-4', deletedAt: new Date() } as never);
+
+    const rows = await findManyByOrg(db, documents, 'org_many');
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.id).sort()).toEqual(['m1', 'm2']);
+  });
+
+  it('respects limit, offset, and orderBy', async () => {
+    await db.insert(documents).values({ id: 'p1', organizationId: 'org_page', number: 'A' } as never);
+    await db.insert(documents).values({ id: 'p2', organizationId: 'org_page', number: 'B' } as never);
+    await db.insert(documents).values({ id: 'p3', organizationId: 'org_page', number: 'C' } as never);
+
+    const rows = await findManyByOrg(db, documents, 'org_page', {
+      limit: 1,
+      offset: 1,
+      orderBy: desc(documents.number),
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.number).toBe('B');
+  });
+});
+
+describe('countOrgRows', () => {
+  it('counts only active rows for the organization', async () => {
+    await db.insert(documents).values({ id: 'c1', organizationId: 'org_count', number: 'DOC-1' } as never);
+    await db.insert(documents).values({ id: 'c2', organizationId: 'org_count', number: 'DOC-2' } as never);
+    await db.insert(documents).values({ id: 'c3', organizationId: 'org_count', number: 'DOC-3', deletedAt: new Date() } as never);
+    await db.insert(documents).values({ id: 'c4', organizationId: 'org_diff', number: 'DOC-4' } as never);
+
+    const count = await countOrgRows(db, documents, 'org_count');
+    expect(count).toBe(2);
+  });
+});
+
+describe('paginateOrgRows', () => {
+  it('paginates rows with metadata', async () => {
+    for (let i = 1; i <= 5; i++) {
+      await db.insert(documents).values({ id: `pg_${i}`, organizationId: 'org_pg', number: `N-${i}` } as never);
+    }
+    await db.insert(documents).values({ id: 'pg_del', organizationId: 'org_pg', number: 'N-DEL', deletedAt: new Date() } as never);
+
+    const res = await paginateOrgRows(db, documents, 'org_pg', {
+      page: 2,
+      pageSize: 2,
+    });
+    expect(res.total).toBe(5);
+    expect(res.page).toBe(2);
+    expect(res.pageSize).toBe(2);
+    expect(res.totalPages).toBe(3);
+    expect(res.items).toHaveLength(2);
   });
 });
