@@ -7,6 +7,8 @@ import type { SQL } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { normalizeRow, patchTypeErrors, pickPatch, stampUpdate, uid } from './lib';
+import { maskRow, maskRows, patchViolations } from './permissions';
+import type { FieldMatrix } from './permissions';
 import type { ApiEnv } from './env';
 
 type RequestContext = Context<{ Bindings: ApiEnv }>;
@@ -55,12 +57,34 @@ export interface ListSpec {
   orgScope?: OrgScopeSpec;
 }
 
+export interface PolicyViolationArgs {
+  c: RequestContext;
+  /** Patch keys the role may not write. */
+  fields: readonly string[];
+}
+
+export interface PolicySpec {
+  /** The host's field matrix — enforcement reads it, never a copy. */
+  matrix: FieldMatrix;
+  /** Matrix entity key for this table's rows. */
+  entity: string;
+  /** Session role for the request (null = anonymous → strictest). */
+  roleOf: (c: RequestContext) => string | null | undefined;
+  /** Fires when a write touches fields the role can't write — the host
+   *  writes its own permission-violation audit row here. Never gates
+   *  the refusal itself. */
+  onViolation?: (args: PolicyViolationArgs) => Promise<void> | void;
+}
+
 export interface CrudSpec extends ListSpec {
   table: CrudTable;
   label: string;
   create?: CreateSpec;
   remove?: boolean;
   auth?: AuthSpec;
+  /** Field-level read masking + write gating (roles read/writes via
+   *  the matrix; most-restricted default for unlisted fields). */
+  policy?: PolicySpec;
 }
 
 const MAX_LIST_LIMIT = 500;
@@ -172,7 +196,12 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
       q.offset(n);
     }
 
-    return c.json(await q);
+    const rows = await q;
+    if (spec.policy) {
+      const role = spec.policy.roleOf(c);
+      return c.json(maskRows(spec.policy.matrix, spec.policy.entity, rows as Record<string, unknown>[], role));
+    }
+    return c.json(rows);
   });
 
   router.patch(`${path}/:id`, async (c) => {
@@ -184,6 +213,14 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
     if (!patch) return c.json({ error: 'No updatable fields' }, 400);
     const typeDetails = patchTypeErrors(table, patch);
     if (typeDetails) return c.json({ error: 'Invalid field types', details: typeDetails }, 400);
+    if (spec.policy) {
+      const role = spec.policy.roleOf(c);
+      const violation = patchViolations(spec.policy.matrix, spec.policy.entity, patch as Record<string, unknown>, role);
+      if (violation.fields.length > 0) {
+        if (spec.policy.onViolation) await spec.policy.onViolation({ c, fields: violation.fields });
+        return c.json({ error: 'These fields are read-only for your role', details: { fields: violation.fields } }, 403);
+      }
+    }
     const db = getDb(c);
     const conds: SQL[] = [eq(table.id, c.req.param('id')), isNull(table.deletedAt) as SQL];
     if (spec.orgScope) {
@@ -197,7 +234,12 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
       .set({ ...patch, ...stampUpdate(table) } as never)
       .where(conds.length === 1 ? conds[0] : and(...conds))
       .returning();
-    return row ? c.json(row) : c.json({ error: `${label} not found` }, 404);
+    if (!row) return c.json({ error: `${label} not found` }, 404);
+    if (spec.policy) {
+      const role = spec.policy.roleOf(c);
+      return c.json(maskRow(spec.policy.matrix, spec.policy.entity, row as Record<string, unknown>, role));
+    }
+    return c.json(row);
   });
 
   if (spec.create) {
@@ -264,6 +306,10 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
         .insert(table)
         .values({ ...defaults?.(c), ...body, ...stamped, id: uid(prefix) } as never)
         .returning();
+      if (spec.policy) {
+        const role = spec.policy.roleOf(c);
+        return c.json(maskRow(spec.policy.matrix, spec.policy.entity, row as Record<string, unknown>, role), 201);
+      }
       return c.json(row, 201);
     });
   }
