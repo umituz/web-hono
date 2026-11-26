@@ -15,7 +15,7 @@ type RequestContext = Context<{ Bindings: ApiEnv }>;
 function defaultDb(c: RequestContext) {
   return createDb(c.env.DATABASE_URL);
 }
-export type CrudDb = Pick<Db, 'select' | 'insert' | 'update'> & {
+export type CrudDb = Pick<Db, 'select' | 'insert' | 'update' | 'delete'> & {
   batch?: Db['batch'];
 };
 export type CrudDbFactory = (c: RequestContext) => CrudDb;

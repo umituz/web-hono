@@ -20,7 +20,7 @@ export { resolveOrg, orgHasMode, nextNumber } from './org';
 export type { UsersLike, OrgsLike, NumberedTable } from './org';
 export { writeAudit, writeNotification, diffChanges, auditAction, writeErrorLog, createErrorLogSink } from './activity';
 export type { ActivityTable, AuditWrite, NotificationWrite, NotificationOpts, DiffOptions, ErrorLogWrite } from './activity';
-export { findRow, findOrgRow, softDelete, softDeleteOrgRow } from './rows';
+export { findRow, findOrgRow, updateOrgRow, softDelete, softDeleteOrgRow, deleteOrgRow } from './rows';
 export type { IdTable, AliveTable, OrgScopedTable } from './rows';
 export { apiNotFound, spaFallback } from './handlers';
 export type { ApiEnv } from './env';

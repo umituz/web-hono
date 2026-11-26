@@ -9,8 +9,24 @@ export type AliveTable = PgTable & { id: PgColumn; deletedAt?: PgColumn };
 export type OrgScopedTable = AliveTable & {
   organizationId?: PgColumn;
   orgId?: PgColumn;
+  tenantId?: PgColumn;
+  organization_id?: PgColumn;
+  org_id?: PgColumn;
+  tenant_id?: PgColumn;
 };
 type RowOf<T> = T extends { $inferSelect: infer R } ? R : never;
+
+function resolveOrgColumnName<T extends IdTable>(table: T, explicit?: string): string {
+  if (explicit) return explicit;
+  const t = table as unknown as Record<string, unknown>;
+  if ('organizationId' in t) return 'organizationId';
+  if ('orgId' in t) return 'orgId';
+  if ('tenantId' in t) return 'tenantId';
+  if ('organization_id' in t) return 'organization_id';
+  if ('org_id' in t) return 'org_id';
+  if ('tenant_id' in t) return 'tenant_id';
+  return 'organizationId';
+}
 
 export async function findRow<T extends IdTable>(db: CrudDb, table: T, id: string, label: string): Promise<RowOf<T>> {
   const hasDeletedAt = 'deletedAt' in table && Boolean((table as { deletedAt?: PgColumn }).deletedAt);
@@ -31,7 +47,7 @@ export async function findOrgRow<T extends IdTable>(
   label: string,
   options?: { orgColumn?: string }
 ): Promise<RowOf<T>> {
-  const colName = options?.orgColumn ?? ('organizationId' in table ? 'organizationId' : 'orgId');
+  const colName = resolveOrgColumnName(table, options?.orgColumn);
   const orgCol = (table as unknown as Record<string, unknown>)[colName] as PgColumn | undefined;
   if (!orgCol) {
     throw new Error(`Table does not have column "${colName}"`);
@@ -53,6 +69,39 @@ export async function findOrgRow<T extends IdTable>(
   return row;
 }
 
+export async function updateOrgRow<T extends IdTable>(
+  db: CrudDb,
+  table: T,
+  id: string,
+  organizationId: string,
+  values: Record<string, unknown>,
+  label: string,
+  options?: { orgColumn?: string }
+): Promise<RowOf<T>> {
+  const colName = resolveOrgColumnName(table, options?.orgColumn);
+  const orgCol = (table as unknown as Record<string, unknown>)[colName] as PgColumn | undefined;
+  if (!orgCol) {
+    throw new Error(`Table does not have column "${colName}"`);
+  }
+  const hasDeletedAt = 'deletedAt' in table && Boolean((table as { deletedAt?: PgColumn }).deletedAt);
+  const conditions = [
+    eq(table.id, id),
+    eq(orgCol, organizationId),
+  ];
+  if (hasDeletedAt) {
+    conditions.push(isNull((table as unknown as { deletedAt: PgColumn }).deletedAt));
+  }
+  const patch = { ...values, ...stampUpdate(table) };
+  const rows = (await db
+    .update(table as unknown as CrudTable)
+    .set(patch as never)
+    .where(and(...conditions))
+    .returning()) as RowOf<T>[];
+  const row = rows[0];
+  if (!row) throw ApiError.notFound(label);
+  return row;
+}
+
 export async function softDelete<T extends IdTable & { deletedAt: PgColumn }>(
   db: CrudDb,
   table: T,
@@ -62,7 +111,7 @@ export async function softDelete<T extends IdTable & { deletedAt: PgColumn }>(
 ): Promise<RowOf<T>> {
   const values = { deletedAt: new Date(), ...stampUpdate(table), ...(extraValues ?? {}) };
   const rows = (await db
-    .update(table as CrudTable)
+    .update(table as unknown as CrudTable)
     .set(values as never)
     .where(and(eq(table.id, id), isNull(table.deletedAt)))
     .returning()) as RowOf<T>[];
@@ -80,16 +129,38 @@ export async function softDeleteOrgRow<T extends IdTable & { deletedAt: PgColumn
   extraValues?: Record<string, unknown>,
   options?: { orgColumn?: string }
 ): Promise<RowOf<T>> {
-  const colName = options?.orgColumn ?? ('organizationId' in table ? 'organizationId' : 'orgId');
+  const colName = resolveOrgColumnName(table, options?.orgColumn);
   const orgCol = (table as unknown as Record<string, unknown>)[colName] as PgColumn | undefined;
   if (!orgCol) {
     throw new Error(`Table does not have column "${colName}"`);
   }
   const values = { deletedAt: new Date(), ...stampUpdate(table), ...(extraValues ?? {}) };
   const rows = (await db
-    .update(table as CrudTable)
+    .update(table as unknown as CrudTable)
     .set(values as never)
     .where(and(eq(table.id, id), eq(orgCol, organizationId), isNull(table.deletedAt)))
+    .returning()) as RowOf<T>[];
+  const row = rows[0];
+  if (!row) throw ApiError.notFound(label);
+  return row;
+}
+
+export async function deleteOrgRow<T extends IdTable>(
+  db: CrudDb,
+  table: T,
+  id: string,
+  organizationId: string,
+  label: string,
+  options?: { orgColumn?: string }
+): Promise<RowOf<T>> {
+  const colName = resolveOrgColumnName(table, options?.orgColumn);
+  const orgCol = (table as unknown as Record<string, unknown>)[colName] as PgColumn | undefined;
+  if (!orgCol) {
+    throw new Error(`Table does not have column "${colName}"`);
+  }
+  const rows = (await db
+    .delete(table as unknown as CrudTable)
+    .where(and(eq(table.id, id), eq(orgCol, organizationId)))
     .returning()) as RowOf<T>[];
   const row = rows[0];
   if (!row) throw ApiError.notFound(label);

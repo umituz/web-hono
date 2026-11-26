@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { findOrgRow, findRow, softDelete, softDeleteOrgRow } from '../src/rows';
+import { findOrgRow, findRow, updateOrgRow, softDelete, softDeleteOrgRow, deleteOrgRow } from '../src/rows';
 import { ApiError } from '../src/index';
 import { makeTestDb, resetDb, resetOrgDb } from './pglite';
 import { documents, widgets } from './helpers';
@@ -83,5 +83,35 @@ describe('softDeleteOrgRow', () => {
   it('throws 404 when deleting document with wrong organization', async () => {
     await db.insert(documents).values({ id: 'd3', organizationId: 'org_x', number: 'DOC-3' } as never);
     await expect(softDeleteOrgRow(db, documents, 'd3', 'org_wrong', 'Document')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('updateOrgRow', () => {
+  it('updates live row scoped to organization', async () => {
+    await db.insert(documents).values({ id: 'd4', organizationId: 'org_m', number: 'OLD-4' } as never);
+    const updated = await updateOrgRow(db, documents, 'd4', 'org_m', { number: 'NEW-4' }, 'Document');
+    expect(updated.id).toBe('d4');
+    expect(updated.number).toBe('NEW-4');
+  });
+
+  it('throws 404 on organization mismatch', async () => {
+    await db.insert(documents).values({ id: 'd5', organizationId: 'org_m', number: 'DOC-5' } as never);
+    await expect(
+      updateOrgRow(db, documents, 'd5', 'org_wrong', { number: 'ATTACK' }, 'Document')
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('deleteOrgRow', () => {
+  it('hard-deletes row scoped to organization', async () => {
+    await db.insert(documents).values({ id: 'd6', organizationId: 'org_del', number: 'DEL-6' } as never);
+    const deleted = await deleteOrgRow(db, documents, 'd6', 'org_del', 'Document');
+    expect(deleted.id).toBe('d6');
+    await expect(findOrgRow(db, documents, 'd6', 'org_del', 'Document')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('throws 404 when deleting row from different organization', async () => {
+    await db.insert(documents).values({ id: 'd7', organizationId: 'org_del', number: 'DEL-7' } as never);
+    await expect(deleteOrgRow(db, documents, 'd7', 'org_wrong', 'Document')).rejects.toMatchObject({ status: 404 });
   });
 });
