@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { findRow, softDelete } from '../src/rows';
+import { findOrgRow, findRow, softDelete, softDeleteOrgRow } from '../src/rows';
 import { ApiError } from '../src/index';
-import { makeTestDb, resetDb } from './pglite';
-import { widgets } from './helpers';
+import { makeTestDb, resetDb, resetOrgDb } from './pglite';
+import { documents, widgets } from './helpers';
 import type { CrudDb } from '../src/crud';
 
 let db: CrudDb;
@@ -11,6 +11,7 @@ let db: CrudDb;
 beforeEach(async () => {
   db = await makeTestDb();
   await resetDb();
+  await resetOrgDb();
 });
 
 describe('findRow', () => {
@@ -35,6 +36,23 @@ describe('findRow', () => {
   });
 });
 
+describe('findOrgRow', () => {
+  it('returns live row when id and organization match', async () => {
+    await db.insert(documents).values({ id: 'd1', organizationId: 'org_a', number: 'DOC-1' } as never);
+    const row = await findOrgRow(db, documents, 'd1', 'org_a', 'Document');
+    expect(row.id).toBe('d1');
+    expect(row.number).toBe('DOC-1');
+  });
+
+  it('throws 404 on organization mismatch', async () => {
+    await db.insert(documents).values({ id: 'd1', organizationId: 'org_a', number: 'DOC-1' } as never);
+    await expect(findOrgRow(db, documents, 'd1', 'org_b', 'Document')).rejects.toMatchObject({
+      status: 404,
+      message: 'Document not found',
+    });
+  });
+});
+
 describe('softDelete', () => {
   it('stamps deletedAt and updatedAt, returns the row', async () => {
     await db.insert(widgets).values({ id: 'w1', name: 'Cog' } as never);
@@ -50,5 +68,20 @@ describe('softDelete', () => {
     await db.insert(widgets).values({ id: 'w1', name: 'Cog' } as never);
     await softDelete(db, widgets, 'w1', 'Widget');
     await expect(softDelete(db, widgets, 'w1', 'Widget')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('softDeleteOrgRow', () => {
+  it('soft-deletes row scoped to organization', async () => {
+    await db.insert(documents).values({ id: 'd2', organizationId: 'org_x', number: 'DOC-2' } as never);
+    const deleted = await softDeleteOrgRow(db, documents, 'd2', 'org_x', 'Document');
+    expect(deleted.id).toBe('d2');
+    expect(deleted.deletedAt).toBeDefined();
+    await expect(findOrgRow(db, documents, 'd2', 'org_x', 'Document')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('throws 404 when deleting document with wrong organization', async () => {
+    await db.insert(documents).values({ id: 'd3', organizationId: 'org_x', number: 'DOC-3' } as never);
+    await expect(softDeleteOrgRow(db, documents, 'd3', 'org_wrong', 'Document')).rejects.toMatchObject({ status: 404 });
   });
 });

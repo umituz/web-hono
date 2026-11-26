@@ -1,6 +1,6 @@
 {
   "name": "@umituz/web-hono",
-  "version": "5.7.0",
+  "version": "5.8.0",
   "description": "API backend platform for Cloudflare Workers + Postgres: createApi skeleton + error envelope layer, full-CRUD resource factory (opt-in create/remove, list params), schema→client type bridge (ClientRow), apiFetch/apiWrite client, reactive fetch-backed store (+React hooks), doc-sync diff/snapshot/push machine (snapshotDocs/diffOps/pushOps), weak-compare If-None-Match matcher (matchesEtag), cookie channels + request scope/ETag/R2-stream server helpers, TTL resource cache, and an RFC-4180 CSV codec (BOM/delimiter tolerance, row-numbered parse, formula-injection-safe stringify). Database transport lives in @umituz/web-database",
   "type": "module",
   "main": "./src/index.ts",
