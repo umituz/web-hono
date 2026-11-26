@@ -4,6 +4,7 @@ import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { createApi } from '../src/api';
 import { ApiError } from '../src/errors';
+import { internalError } from '../src/http';
 import { validateJson } from '../src/validator';
 import type { ApiEnv } from '../src/env';
 
@@ -184,6 +185,71 @@ describe('createApi', () => {
         status: 500,
         message: 'boom',
       }),
+      env,
+    );
+  });
+
+  it('notifies onError sink once for a thrown error and not again for its response', async () => {
+    const sink = vi.fn();
+    const subRouter = new Hono<{ Bindings: ApiEnv }>();
+    subRouter.get('/fail', () => {
+      throw new Error('boom');
+    });
+
+    const app = createApi<ApiEnv>({
+      service: 'test-api',
+      routers: [['/test', subRouter]],
+      onError: sink,
+    });
+
+    await app.request('/api/test/fail', undefined, env);
+    expect(sink).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies onError sink when a handler returns a 5xx response', async () => {
+    const sink = vi.fn();
+    const subRouter = new Hono<{ Bindings: ApiEnv }>();
+    subRouter.get('/fail', (c) => internalError(c, 'Failed to fetch users'));
+
+    const app = createApi<ApiEnv>({
+      service: 'test-api',
+      routers: [['/test', subRouter]],
+      onError: sink,
+    });
+
+    const res = await app.request('/api/test/fail', undefined, env);
+    expect(res.status).toBe(500);
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        path: '/api/test/fail',
+        status: 500,
+        message: 'Failed to fetch users',
+      }),
+      env,
+    );
+    expect(await res.json()).toEqual({ error: 'Failed to fetch users', details: 'error' });
+  });
+
+  it('notifies onError sink for returned 503 responses but not for 4xx responses', async () => {
+    const sink = vi.fn();
+    const subRouter = new Hono<{ Bindings: ApiEnv }>();
+    subRouter.get('/unavailable', (c) => c.json({ error: 'billing_not_configured' }, 503));
+    subRouter.get('/bad', (c) => c.json({ error: 'nope' }, 400));
+
+    const app = createApi<ApiEnv>({
+      service: 'test-api',
+      routers: [['/test', subRouter]],
+      onError: sink,
+    });
+
+    expect((await app.request('/api/test/bad', undefined, env)).status).toBe(400);
+    expect(sink).not.toHaveBeenCalled();
+    expect((await app.request('/api/test/unavailable', undefined, env)).status).toBe(503);
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 503, message: 'billing_not_configured' }),
       env,
     );
   });

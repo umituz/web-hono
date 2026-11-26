@@ -38,9 +38,24 @@ export function createApi<E extends ApiEnv = ApiEnv>(config: ApiConfig<E>): Hono
   for (const [path, router] of config.routers ?? []) api.route(path, router);
 
   const app = new Hono<{ Bindings: E }>();
-  app.route('/api', api);
   if (config.onError) {
     const sink = config.onError;
+    app.use('/api/*', async (c, next) => {
+      await next();
+      if (c.error) return;
+      if (c.res.status < 500) return;
+      let message = `HTTP ${c.res.status}`;
+      try {
+        const body = (await c.res.clone().json().catch(() => undefined)) as { error?: unknown } | undefined;
+        if (body && typeof body.error === 'string' && body.error.length > 0) message = body.error;
+      } catch {}
+      try {
+        await sink(
+          { method: c.req.method, path: c.req.path, status: c.res.status, message, error: undefined },
+          c.env,
+        );
+      } catch {}
+    });
     const base = apiOnError as unknown as (
       err: unknown,
       c: Context<{ Bindings: E }>,
@@ -64,6 +79,7 @@ export function createApi<E extends ApiEnv = ApiEnv>(config: ApiConfig<E>): Hono
   } else {
     app.onError(apiOnError as unknown as ErrorHandler<{ Bindings: E }>);
   }
+  app.route('/api', api);
 
   app.get('/api/bootstrap', async (c) => {
     const raw = c.req.query('paths') ?? '';
