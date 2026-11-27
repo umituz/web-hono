@@ -254,3 +254,52 @@ describe('createApi', () => {
     );
   });
 });
+
+describe('createApi security wiring', () => {
+  it('applies default security headers on api routes when security: true', async () => {
+    const app = createApi<ApiEnv>({ service: 'sec', security: true });
+    const res = await app.request('/api/health', undefined, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'self'");
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Strict-Transport-Security')).toBeNull();
+  });
+
+  it('leaves responses untouched when security is not configured', async () => {
+    const app = createApi<ApiEnv>({ service: 'sec' });
+    const res = await app.request('/api/health', undefined, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Security-Policy')).toBeNull();
+    expect(res.headers.get('X-Frame-Options')).toBeNull();
+  });
+
+  it('passes custom csp directives through and merges with defaults', async () => {
+    const app = createApi<ApiEnv>({
+      service: 'sec',
+      security: { csp: { styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'] } },
+    });
+    const res = await app.request('/api/health', undefined, env);
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
+    expect(csp).toContain("font-src 'self' data: https://fonts.gstatic.com");
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp.indexOf('https://fonts.googleapis.com')).toBe(csp.lastIndexOf('https://fonts.googleapis.com'));
+  });
+
+  it('can disable the csp while keeping the other headers', async () => {
+    const app = createApi<ApiEnv>({ service: 'sec', security: { csp: false } });
+    const res = await app.request('/api/health', undefined, env);
+    expect(res.headers.get('Content-Security-Policy')).toBeNull();
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY');
+  });
+
+  it('sets hsts only on https requests', async () => {
+    const app = createApi<ApiEnv>({ service: 'sec', security: { hsts: true } });
+    const http = await app.request('http://x/api/health', undefined, env);
+    expect(http.headers.get('Strict-Transport-Security')).toBeNull();
+    const https = await app.request('https://x/api/health', undefined, env);
+    expect(https.headers.get('Strict-Transport-Security')).toContain('max-age=');
+  });
+});

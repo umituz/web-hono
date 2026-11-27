@@ -5,6 +5,8 @@ import type { MiddlewareHandler } from 'hono';
 import { apiNotFound, spaFallback } from './handlers';
 import { apiOnError } from './errors';
 import { healthRouter } from './health';
+import { securityHeaders } from './security';
+import type { SecurityHeadersOptions } from './security';
 import type { ApiEnv } from './env';
 
 export interface ApiErrorSinkInfo {
@@ -25,6 +27,7 @@ export interface ApiConfig<E extends ApiEnv = ApiEnv> {
   build?: string;
   routers?: ReadonlyArray<readonly [string, Hono<{ Bindings: E }>]>;
   middleware?: ReadonlyArray<MiddlewareHandler<{ Bindings: E }>>;
+  security?: boolean | SecurityHeadersOptions;
   onError?: ApiErrorSink<E>;
 }
 
@@ -38,6 +41,9 @@ export function createApi<E extends ApiEnv = ApiEnv>(config: ApiConfig<E>): Hono
   for (const [path, router] of config.routers ?? []) api.route(path, router);
 
   const app = new Hono<{ Bindings: E }>();
+  if (typeof config.security === 'object' || config.security === true) {
+    app.use('*', securityHeaders(config.security === true ? {} : config.security));
+  }
   if (config.onError) {
     const sink = config.onError;
     app.use('/api/*', async (c, next) => {

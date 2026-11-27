@@ -17,7 +17,7 @@ The package is **source-distributed** (published as raw TypeScript in `src/`). W
 
 | Pillar | What it replaces | Entry |
 |---|---|---|
-| `createApi({ service, build, routers, middleware })` | the per-app `api/index.ts` skeleton, `routes/health.ts`, hand-mounted 404/SPA handlers | `.` |
+| `createApi({ service, build, routers, middleware, security })` | the per-app `api/index.ts` skeleton, `routes/health.ts`, hand-mounted 404/SPA handlers, security-header middleware wiring | `.` |
 | `ApiError` + `apiOnError` | unhandled 500s, inconsistent error bodies; maps zod→400, pg unique→409 | `.` |
 | `crudRoutes` with opt-in `create`/`remove` + `?limit&offset&order` | every hand-written POST/DELETE/list-pagination route for plain rows | `.` |
 | `Row<T>` / `ClientRow<T>` type bridge | hand-mirrored client interfaces (foodora: 1215 lines) | `/types` |
@@ -85,6 +85,26 @@ Generates:
 - `DELETE /api/branches/:id` — soft delete → `{ ok: true }` / `404`
 
 Omit `create`/`remove` and exactly GET + PATCH register — the 1.x surface. `listRoutes` is the GET-only sibling for append-only collections (event logs, users). `db` is injectable (`db: (c) => myDb`) — the default builds a per-request database via `createDb` from `@umituz/web-database`.
+
+**3b. Verb factory** — the hand-written action routes that stay out of `crudRoutes`' hard scope (transitions, domain verbs, one-shot commands):
+
+```ts
+import { verbRoutes, verbAction } from '@umituz/web-hono';
+
+orgRouter.route('/', verbRoutes({
+  path: '/water-sources/:id/treat',
+  json: { schema: TreatSchema, invalid: 'Invalid treatment payload' },  // zod → typed input
+  db: (c) => getDb(c.env),                                              // optional — defaults to createDb
+  handler: async ({ c, input, db }) => {
+    const [row] = await db.update(waterSources).set({ lastTreatedOn: input.treatedOn }).where(...).returning();
+    return ok(c, row);
+  },
+}));
+
+orgRouter.route('/', verbAction({ method: 'delete', path: '/water-sources/:id', db, handler: ({ c, db }) => ... }));
+```
+
+`verbRoutes` validates the json body (`{ error, details }` 400 envelope, custom `invalid` message) and hands the handler a typed `input`, the injected `db` and the hono context with path params. `verbAction` is the bodyless sibling (defaults to POST like `verbRoutes`; middlewares run ahead of validation). Both return a mountable router; `db` is injectable and defaults to the same per-request `createDb` as `crudRoutes`.
 
 **4. Schema helpers + type bridge** — one encoding of the fleet conventions:
 
@@ -174,7 +194,7 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 
 | Entry point | Exports |
 |---|---|
-| `@umituz/web-hono` | `createApi`, `ApiConfig`, `healthRouter`, `ApiError`, `apiOnError`, `crudRoutes`, `listRoutes`, `CrudSpec`/`CrudTable`/`CreateSpec`/`ListSpec`/`CrudDb`, `uid`, `pickPatch`, `stampUpdate`, `trio`, `apiNotFound`, `spaFallback`, `ApiEnv`, `isoNow`, `isoAt`, `todayISO`, `addDaysISO`, `IsoPrecision` |
+| `@umituz/web-hono` | `createApi` (+ `security: true | SecurityHeadersOptions` wiring), `ApiConfig`, `healthRouter`, `ApiError`, `apiOnError`, `crudRoutes`, `listRoutes`, `verbRoutes`, `verbAction`, `CrudSpec`/`CrudTable`/`CreateSpec`/`ListSpec`/`CrudDb`, `uid`, `pickPatch`, `stampUpdate`, `trio`, `apiNotFound`, `spaFallback`, `ApiEnv`, `isoNow`, `isoAt`, `todayISO`, `addDaysISO`, `IsoPrecision` |
 | `@umituz/web-hono/types` | `Row<T>`, `NewRow<T>`, `Serialized<T>`, `ClientRow<T>` — type-only |
 | `@umituz/web-hono/validator` | `validateJson(schema, message?)` |
 | `@umituz/web-hono/client` | `apiFetch<T>`, `apiWrite<T>` (void/204-tolerant) |
@@ -206,7 +226,7 @@ await snapshotToSeed({ specs: TABLE_SPECS, url, outPath: new URL('./seed-data.js
 npm test
 ```
 
-280 vitest cases cover the pure logic AND — since 1.3, via in-memory Postgres (PGlite) — the factory's real database behavior: list/soft-delete hiding, `?limit&offset&order`, POST create (uid prefix, defaults-under-body, zod 400s, unique→409), PATCH stamping, DELETE, and the 1.x additivity pins (no `create`/`remove` ⇒ POST/DELETE 404, params-less GET unchanged). Plus: pickPatch/stampUpdate filters, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, createApi chain (health/middleware/onError/JSON-404-vs-SPA), and the store machine (hydration dedupe/retry, refresh selectivity, pub/sub, view memoization, immutable refs, hooks).
+366 vitest cases cover the pure logic AND — since 1.3, via in-memory Postgres (PGlite) — the factory's real database behavior: list/soft-delete hiding, `?limit&offset&order`, POST create (uid prefix, defaults-under-body, zod 400s, unique→409), PATCH stamping, DELETE, and the 1.x additivity pins (no `create`/`remove` ⇒ POST/DELETE 404, params-less GET unchanged). Plus: pickPatch/stampUpdate filters, uid shape, the 400/404 envelopes, validator contract, client error mapping and void-endpoint tolerance, createApi chain (health/middleware/onError/JSON-404-vs-SPA/security-header wiring incl. CSP merge + https-only HSTS), the verb factory (typed json input, 400 envelope, default-POST, middleware ordering, default db), and the store machine (hydration dedupe/retry, refresh selectivity, pub/sub, view memoization, immutable refs, hooks).
 
 ## License
 

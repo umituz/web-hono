@@ -4,6 +4,8 @@ export { healthRouter } from './health';
 export { ApiError, apiOnError, isUniqueViolation } from './errors';
 export { crudRoutes, listRoutes } from './crud';
 export type { CrudSpec, CrudTable, CrudDb, CrudDbFactory, CreateSpec, ListSpec, OrgScopeSpec, AuthSpec, ThroughSpec, PolicySpec, PolicyViolationArgs } from './crud';
+export { verbRoutes, verbAction } from './verb';
+export type { VerbContext, VerbJsonSpec, VerbMethod, VerbSpec, VerbActionSpec } from './verb';
 export {
   canReadField, canWriteField, visibleFieldsFor, writableFieldsFor,
   maskRow, maskRows, patchViolations, matrixFootprint,
