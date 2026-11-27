@@ -19,7 +19,7 @@ export class ApiClientError extends Error {
 
 export async function apiFetch<T>(
   path: string,
-  init: { method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; json?: unknown; form?: FormData } = {},
+  init: { method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; json?: unknown; form?: FormData; signal?: AbortSignal } = {},
 ): Promise<T> {
   const res = await fetch(path, {
     method: init.method ?? 'GET',
@@ -30,6 +30,7 @@ export async function apiFetch<T>(
           : { 'content-type': 'application/json', accept: 'application/json' }
         : { accept: 'application/json' },
     body: init.form !== undefined ? init.form : init.json !== undefined ? JSON.stringify(init.json) : undefined,
+    signal: init.signal,
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
