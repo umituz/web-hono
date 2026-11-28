@@ -34,6 +34,7 @@ function stubFetch(handlers: Record<string, () => unknown>) {
 }
 
 const boom = () => new Response('boom', { status: 500 });
+const gated = () => new Response('unauthorized', { status: 401 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -52,6 +53,24 @@ describe('createStore', () => {
     expect(store.getDb().flag).toEqual({ on: true }); // singleton: single row, not wrapped
     await store.ensureHydrated(); // cached — no second round
     expect(calls.filter((c) => c === 'GET /api/items')).toHaveLength(1);
+  });
+
+  it('hydration tolerates auth-gated collections (401 stays empty) but still rejects real failures', async () => {
+    stubFetch({
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': gated,
+    });
+    const store = makeStore();
+    await store.ensureHydrated();
+    expect(store.getDb().items).toEqual([{ id: 'a' }]);
+    expect(store.getDb().flag).toEqual({ on: false }); // empty state survives the 401
+
+    stubFetch({
+      'GET /api/items': () => [{ id: 'a' }],
+      'GET /api/flag': boom,
+    });
+    const failing = makeStore();
+    await expect(failing.ensureHydrated()).rejects.toThrow();
   });
 
   it('dedupes concurrent hydration into one fetch round', async () => {

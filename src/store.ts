@@ -72,7 +72,16 @@ export function createStore<Database extends object>(config: StoreConfig<Databas
     // ISO strings). Singleton collections return their one row — same call.
     // immutable mode installs a fresh array reference — memo identity for
     // React consumers (singletons get a fresh reference either way).
-    const rows = await apiFetch<unknown>(endpoints[key]);
+    // Auth-gated endpoints (401/403) leave the collection at its empty state
+    // instead of failing the whole hydration — anonymous visitors keep the
+    // app usable; every other failure still rejects.
+    let rows: unknown;
+    try {
+      rows = await apiFetch<unknown>(endpoints[key]);
+    } catch (err) {
+      if (err instanceof ApiClientError && (err.status === 401 || err.status === 403)) return;
+      throw err;
+    }
     (cache as Record<string, unknown>)[key] = immutable && Array.isArray(rows) ? [...rows] : rows;
   }
 
