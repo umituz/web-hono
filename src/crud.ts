@@ -171,17 +171,21 @@ export function crudRoutes(spec: CrudSpec): Hono<{ Bindings: ApiEnv }> {
     }
     const q = db.select().from(table).where(conds.length === 1 ? conds[0] : and(...conds)).$dynamic();
 
+    const orderExprs: SQL[] = [];
     const orderParam = c.req.query('order');
     if (orderParam !== undefined) {
       const wantDesc = orderParam.startsWith('-');
       const name = orderParam.slice(wantDesc ? 1 : 0);
       const found = (getTableColumns(table) as unknown as Record<string, PgColumn>)[name];
       if (!found) return c.json({ error: 'Invalid order column' }, 400);
-      q.orderBy(wantDesc ? desc(found) : asc(found));
+      orderExprs.push(wantDesc ? desc(found) : asc(found));
     } else if (orderBy) {
       const orders = Array.isArray(orderBy) ? orderBy : [orderBy];
-      q.orderBy(...orders.map((o) => (o.dir === 'desc' ? desc(o.col) : asc(o.col))));
+      orderExprs.push(...orders.map((o) => (o.dir === 'desc' ? desc(o.col) : asc(o.col))));
     }
+    const idColumn = (getTableColumns(table) as unknown as Record<string, PgColumn>).id;
+    if (idColumn) orderExprs.push(asc(idColumn));
+    if (orderExprs.length > 0) q.orderBy(...orderExprs);
 
     const limitParam = c.req.query('limit');
     if (limitParam !== undefined) {
